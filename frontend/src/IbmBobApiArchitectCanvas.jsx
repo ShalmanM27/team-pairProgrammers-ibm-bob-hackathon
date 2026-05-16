@@ -1,5 +1,13 @@
-import { useCallback, useState } from 'react';
-import { Background, Controls, MiniMap, ReactFlow, useEdgesState, useNodesState } from '@xyflow/react';
+import { useCallback, useRef, useState } from 'react';
+import {
+  Background,
+  Controls,
+  MiniMap,
+  ReactFlow,
+  addEdge,
+  useEdgesState,
+  useNodesState,
+} from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
 import CodeSidebar from './components/CodeSidebar';
@@ -9,8 +17,11 @@ import { loadMainFileGraph, saveFunctionContent } from './lib/apiClient';
 export default function IbmBobApiArchitectCanvas() {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const nodeIdCounterRef = useRef(1);
 
   const [mainFilePath, setMainFilePath] = useState('');
+  const [newNodeLabel, setNewNodeLabel] = useState('Router Node');
+  const [newNodeKind, setNewNodeKind] = useState('router');
   const [loadedFilePath, setLoadedFilePath] = useState('');
   const [status, setStatus] = useState('Enter a main Python file path and click Load Graph.');
   const [selectedNode, setSelectedNode] = useState(null);
@@ -20,6 +31,155 @@ export default function IbmBobApiArchitectCanvas() {
 
   const [isLoadingGraph, setIsLoadingGraph] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  const createNodeVisual = useCallback((kind, label) => {
+    if (kind === 'input') {
+      return {
+        type: 'input',
+        style: {
+          background: '#1f2433',
+          color: '#f4f4f4',
+          border: '1px solid #0f62fe',
+          borderRadius: 10,
+          padding: 10,
+          width: 240,
+        },
+      };
+    }
+    if (kind === 'output') {
+      return {
+        type: 'output',
+        style: {
+          background: '#1f2433',
+          color: '#f4f4f4',
+          border: '1px solid #0f62fe',
+          borderRadius: 10,
+          padding: 10,
+          width: 240,
+        },
+      };
+    }
+    if (kind === 'router') {
+      return {
+        type: 'default',
+        style: {
+          background: '#1f2433',
+          color: '#f4f4f4',
+          border: '1px solid #0f62fe',
+          borderRadius: 10,
+          padding: 10,
+          width: 240,
+        },
+        defaultLabel: label || 'Express Router',
+      };
+    }
+    if (kind === 'function') {
+      return {
+        type: 'default',
+        style: {
+          background: '#20202f',
+          color: '#f4f4f4',
+          border: '1px solid #39394c',
+          borderRadius: 10,
+          padding: 10,
+          width: 240,
+        },
+      };
+    }
+    return {
+      type: 'default',
+      style: {
+        background: '#20202f',
+        color: '#f4f4f4',
+        border: '1px solid #39394c',
+        borderRadius: 10,
+        padding: 10,
+        width: 240,
+      },
+    };
+  }, []);
+
+  const getNodePosition = useCallback(() => {
+    if (selectedNode?.position) {
+      return {
+        x: selectedNode.position.x + 260,
+        y: selectedNode.position.y + 40,
+      };
+    }
+
+    const index = nodes.length;
+    const col = index % 5;
+    const row = Math.floor(index / 5);
+    return {
+      x: 80 + col * 250,
+      y: 90 + row * 140,
+    };
+  }, [nodes.length, selectedNode]);
+
+  const onConnect = useCallback(
+    (connection) => {
+      setEdges((currentEdges) =>
+        addEdge(
+          {
+            ...connection,
+            animated: true,
+            style: { stroke: '#0f62fe' },
+          },
+          currentEdges,
+        ),
+      );
+    },
+    [setEdges],
+  );
+
+  const addManualNode = useCallback(
+    (requestedKind, requestedLabel) => {
+      const kind = requestedKind || newNodeKind;
+      const rawLabel = (requestedLabel ?? newNodeLabel).trim();
+      const visual = createNodeVisual(kind, rawLabel);
+      const label = visual.defaultLabel || rawLabel || 'New Node';
+      const nodeId = `manual-${Date.now()}-${nodeIdCounterRef.current++}`;
+      const position = getNodePosition();
+
+      const newNode = {
+        id: nodeId,
+        type: visual.type,
+        position,
+        data: {
+          label,
+          kind,
+          title: label,
+          file: '',
+          function_id: '',
+          code: kind === 'function' ? `def ${label.replace(/\s+/g, '_').toLowerCase()}():\n    pass` : '',
+        },
+        style: visual.style,
+      };
+
+      setNodes((currentNodes) => [...currentNodes, newNode]);
+      setStatus(`Added ${kind} node: ${label}`);
+    },
+    [createNodeVisual, getNodePosition, newNodeKind, newNodeLabel, setNodes],
+  );
+
+  const addQuickRouter = useCallback(() => {
+    addManualNode('router', 'Express Router');
+  }, [addManualNode]);
+
+  const deleteSelectedNode = useCallback(() => {
+    if (!selectedNode?.id) {
+      return;
+    }
+    const selectedId = selectedNode.id;
+    setNodes((currentNodes) => currentNodes.filter((node) => node.id !== selectedId));
+    setEdges((currentEdges) =>
+      currentEdges.filter((edge) => edge.source !== selectedId && edge.target !== selectedId),
+    );
+    setSelectedNode(null);
+    setFunctionCode('');
+    setActiveFunctionId('');
+    setStatus('Deleted selected node.');
+  }, [selectedNode, setEdges, setNodes]);
 
   const applyGraphPayload = useCallback(
     (graphPayload, nextStatus) => {
@@ -119,6 +279,7 @@ export default function IbmBobApiArchitectCanvas() {
   }, [activeFunctionId, applyGraphPayload, functionCode]);
 
   const isFunctionNode = selectedNode?.data?.kind === 'function';
+  const canSaveFunction = isFunctionNode && Boolean(selectedNode?.data?.function_id);
 
   return (
     <div className="flex h-screen w-screen flex-col bg-[#161616] text-slate-100">
@@ -126,6 +287,14 @@ export default function IbmBobApiArchitectCanvas() {
         mainFilePath={mainFilePath}
         onMainFilePathChange={setMainFilePath}
         onLoadGraph={loadGraph}
+        newNodeLabel={newNodeLabel}
+        onNewNodeLabelChange={setNewNodeLabel}
+        newNodeKind={newNodeKind}
+        onNewNodeKindChange={setNewNodeKind}
+        onAddNode={() => addManualNode()}
+        onQuickAddRouter={addQuickRouter}
+        onDeleteSelectedNode={deleteSelectedNode}
+        hasSelectedNode={Boolean(selectedNode?.id)}
         isLoading={isLoadingGraph}
         status={status}
         loadedFilePath={loadedFilePath}
@@ -138,7 +307,12 @@ export default function IbmBobApiArchitectCanvas() {
             edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
             onNodeClick={onNodeClick}
+            connectionLineStyle={{ stroke: '#0f62fe' }}
+            defaultEdgeOptions={{ animated: true, style: { stroke: '#0f62fe' } }}
+            snapToGrid
+            snapGrid={[20, 20]}
             fitView
             className="bg-[#161616]"
           >
@@ -146,7 +320,11 @@ export default function IbmBobApiArchitectCanvas() {
               pannable
               zoomable
               nodeColor={(node) => {
-                if (node.data?.kind === 'input' || node.data?.kind === 'output') {
+                if (
+                  node.data?.kind === 'input' ||
+                  node.data?.kind === 'output' ||
+                  node.data?.kind === 'router'
+                ) {
                   return '#0f62fe';
                 }
                 return '#697077';
@@ -166,7 +344,7 @@ export default function IbmBobApiArchitectCanvas() {
           onFunctionCodeChange={setFunctionCode}
           onSaveFunction={saveCurrentFunction}
           isSaving={isSaving}
-          isFunctionNode={isFunctionNode}
+          isFunctionNode={canSaveFunction}
           syntaxErrors={syntaxErrors}
         />
       </main>

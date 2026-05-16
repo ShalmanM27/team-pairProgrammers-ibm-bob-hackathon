@@ -15,7 +15,7 @@ app = FastAPI(title="Testing API")
 @app.get("/api/v1/users")
 def list_users():
     users = fetch_active_users()
-
+    print(1)
     return build_users_response(users)
 
 
