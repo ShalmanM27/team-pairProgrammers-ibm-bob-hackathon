@@ -1,92 +1,135 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Background, Controls, MiniMap, ReactFlow, useEdgesState, useNodesState } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-const BRIDGE_BASE_URL = 'http://localhost:5000';
+import CodeSidebar from './components/CodeSidebar';
+import TopBar from './components/TopBar';
+import { loadMainFileGraph, saveFunctionContent } from './lib/apiClient';
 
 export default function IbmBobApiArchitectCanvas() {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+
   const [mainFilePath, setMainFilePath] = useState('');
   const [loadedFilePath, setLoadedFilePath] = useState('');
   const [status, setStatus] = useState('Enter a main Python file path and click Load Graph.');
   const [selectedNode, setSelectedNode] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [functionCode, setFunctionCode] = useState('');
+  const [activeFunctionId, setActiveFunctionId] = useState('');
+  const [syntaxErrors, setSyntaxErrors] = useState([]);
 
-  const selectedCode = useMemo(() => {
-    if (!selectedNode?.data?.code) {
-      return '# Click an endpoint or function node to view code.';
-    }
-    return selectedNode.data.code;
-  }, [selectedNode]);
+  const [isLoadingGraph, setIsLoadingGraph] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const loadMainFileGraph = useCallback(async () => {
+  const applyGraphPayload = useCallback(
+    (graphPayload, nextStatus) => {
+      const graphNodes = graphPayload?.nodes || [];
+      const graphEdges = graphPayload?.edges || [];
+
+      setNodes(graphNodes);
+      setEdges(graphEdges);
+      setSelectedNode((currentNode) => {
+        if (currentNode?.id) {
+          const retainedNode = graphNodes.find((node) => node.id === currentNode.id);
+          if (retainedNode) {
+            return retainedNode;
+          }
+        }
+        return graphNodes[0] || null;
+      });
+
+      if (nextStatus) {
+        setStatus(nextStatus);
+      }
+    },
+    [setEdges, setNodes],
+  );
+
+  const loadGraph = useCallback(async () => {
     const trimmedPath = mainFilePath.trim();
     if (!trimmedPath) {
       setStatus('Error: Main Python file path is required.');
       return;
     }
 
-    setIsLoading(true);
+    setIsLoadingGraph(true);
     setStatus('Loading graph from backend...');
 
     try {
-      const response = await fetch(`${BRIDGE_BASE_URL}/api/load-main-file`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: trimmedPath }),
-      });
-
-      if (!response.ok) {
-        const errorPayload = await response.json().catch(() => ({}));
-        throw new Error(errorPayload.detail || `Load failed (HTTP ${response.status})`);
-      }
-
-      const payload = await response.json();
-      const graphNodes = payload.nodes || [];
-      const graphEdges = payload.edges || [];
-
-      setNodes(graphNodes);
-      setEdges(graphEdges);
-      setSelectedNode(graphNodes[0] || null);
+      const payload = await loadMainFileGraph(trimmedPath);
+      applyGraphPayload(payload, `Loaded ${payload.nodes?.length || 0} nodes from ${payload.main_file_path || trimmedPath}`);
       setLoadedFilePath(payload.main_file_path || trimmedPath);
-      setStatus(`Loaded ${graphNodes.length} nodes from ${payload.main_file_path || trimmedPath}`);
+      setSyntaxErrors([]);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unexpected loading error';
       setStatus(`Error: ${message}`);
     } finally {
-      setIsLoading(false);
+      setIsLoadingGraph(false);
     }
-  }, [mainFilePath, setEdges, setNodes]);
+  }, [applyGraphPayload, mainFilePath]);
 
   const onNodeClick = useCallback((_, node) => {
     setSelectedNode(node);
+    if (node?.data?.kind === 'function') {
+      setFunctionCode(node?.data?.code || '');
+      setActiveFunctionId(node?.data?.function_id || '');
+    } else {
+      setFunctionCode('');
+      setActiveFunctionId('');
+    }
   }, []);
+
+  const saveCurrentFunction = useCallback(async () => {
+    if (!activeFunctionId) {
+      setStatus('Error: Select a function node before saving.');
+      return;
+    }
+
+    setIsSaving(true);
+    setStatus('Saving function content...');
+
+    try {
+      const payload = await saveFunctionContent(activeFunctionId, functionCode);
+      const returnedErrors = payload.syntax_errors || [];
+      setSyntaxErrors(returnedErrors);
+
+      if (payload.has_syntax_errors) {
+        setStatus(`Saved with ${returnedErrors.length} syntax error(s).`);
+        return;
+      }
+
+      if (payload.graph) {
+        applyGraphPayload(payload.graph, 'Function saved and graph refreshed.');
+        const refreshedNode = payload.graph.nodes?.find(
+          (node) => node?.data?.function_id === activeFunctionId,
+        );
+        if (refreshedNode) {
+          setSelectedNode(refreshedNode);
+          setFunctionCode(refreshedNode?.data?.code || '');
+        }
+      } else {
+        setStatus('Function saved.');
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unexpected save error';
+      setStatus(`Error: ${message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [activeFunctionId, applyGraphPayload, functionCode]);
+
+  const isFunctionNode = selectedNode?.data?.kind === 'function';
 
   return (
     <div className="flex h-screen w-screen flex-col bg-[#161616] text-slate-100">
-      <header className="border-b border-[#2f2f3d] bg-[#1e1e2e] px-4 py-3">
-        <h3 className="text-base font-semibold text-[#0f62fe]">IBM Bob API Architect Canvas Bridge</h3>
-        <div className="mt-3 flex items-center gap-2">
-          <input
-            type="text"
-            value={mainFilePath}
-            onChange={(event) => setMainFilePath(event.target.value)}
-            placeholder="D:/projects/IBM/testing/sample_api.py"
-            className="h-9 flex-1 rounded-md border border-[#3a3a4a] bg-[#161b28] px-3 text-sm text-slate-100 outline-none transition focus:border-[#0f62fe]"
-          />
-          <button
-            type="button"
-            onClick={loadMainFileGraph}
-            disabled={isLoading}
-            className="h-9 rounded-md bg-[#0f62fe] px-4 text-sm font-semibold text-white transition hover:bg-[#0353e9] disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {isLoading ? 'Loading...' : 'Load Graph'}
-          </button>
-        </div>
-        <p className="mt-2 text-xs text-slate-400">{status}</p>
-        {loadedFilePath ? <p className="mt-1 text-xs text-slate-500">{loadedFilePath}</p> : null}
-      </header>
+      <TopBar
+        mainFilePath={mainFilePath}
+        onMainFilePathChange={setMainFilePath}
+        onLoadGraph={loadGraph}
+        isLoading={isLoadingGraph}
+        status={status}
+        loadedFilePath={loadedFilePath}
+      />
 
       <main className="flex min-h-0 flex-1">
         <section className="min-h-0 flex-1">
@@ -103,10 +146,7 @@ export default function IbmBobApiArchitectCanvas() {
               pannable
               zoomable
               nodeColor={(node) => {
-                if (node.data?.kind === 'input') {
-                  return '#0f62fe';
-                }
-                if (node.data?.kind === 'output') {
+                if (node.data?.kind === 'input' || node.data?.kind === 'output') {
                   return '#0f62fe';
                 }
                 return '#697077';
@@ -119,18 +159,16 @@ export default function IbmBobApiArchitectCanvas() {
           </ReactFlow>
         </section>
 
-        <aside className="w-[420px] border-l border-[#2f2f3d] bg-[#1a1d2b] p-4">
-          <div className="mb-3">
-            <h4 className="text-sm font-semibold text-slate-100">
-              {selectedNode?.data?.title || 'Selected Node'}
-            </h4>
-            <p className="mt-1 text-xs text-slate-400">{selectedNode?.data?.file || ''}</p>
-          </div>
-
-          <pre className="h-[calc(100%-56px)] overflow-auto rounded-md border border-[#3a3a4a] bg-[#10131d] p-3 text-xs leading-relaxed text-slate-200">
-            <code>{selectedCode}</code>
-          </pre>
-        </aside>
+        <CodeSidebar
+          selectedTitle={selectedNode?.data?.title}
+          filePath={selectedNode?.data?.file || ''}
+          functionCode={functionCode}
+          onFunctionCodeChange={setFunctionCode}
+          onSaveFunction={saveCurrentFunction}
+          isSaving={isSaving}
+          isFunctionNode={isFunctionNode}
+          syntaxErrors={syntaxErrors}
+        />
       </main>
     </div>
   );
