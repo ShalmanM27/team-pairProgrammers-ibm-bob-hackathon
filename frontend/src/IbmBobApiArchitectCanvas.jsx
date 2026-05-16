@@ -12,6 +12,9 @@ import '@xyflow/react/dist/style.css';
 
 import CodeSidebar from './components/CodeSidebar';
 import TopBar from './components/TopBar';
+import AIChatbot from './components/AIChatbot';
+import AIGenerateEndpoint from './components/AIGenerateEndpoint';
+import AIRefactorFunction from './components/AIRefactorFunction';
 import { loadMainFileGraph, saveFunctionContent } from './lib/apiClient';
 
 export default function IbmBobApiArchitectCanvas() {
@@ -23,6 +26,7 @@ export default function IbmBobApiArchitectCanvas() {
   const [newNodeLabel, setNewNodeLabel] = useState('Router Node');
   const [newNodeKind, setNewNodeKind] = useState('router');
   const [loadedFilePath, setLoadedFilePath] = useState('');
+  const [workspacePath, setWorkspacePath] = useState('');
   const [status, setStatus] = useState('Enter a main Python file path and click Load Graph.');
   const [selectedNode, setSelectedNode] = useState(null);
   const [functionCode, setFunctionCode] = useState('');
@@ -31,6 +35,11 @@ export default function IbmBobApiArchitectCanvas() {
 
   const [isLoadingGraph, setIsLoadingGraph] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // AI Feature States
+  const [isChatbotOpen, setIsChatbotOpen] = useState(false);
+  const [isGenerateEndpointOpen, setIsGenerateEndpointOpen] = useState(false);
+  const [isRefactorFunctionOpen, setIsRefactorFunctionOpen] = useState(false);
 
   const createNodeVisual = useCallback((kind, label) => {
     if (kind === 'input') {
@@ -219,6 +228,7 @@ export default function IbmBobApiArchitectCanvas() {
       const payload = await loadMainFileGraph(trimmedPath);
       applyGraphPayload(payload, `Loaded ${payload.nodes?.length || 0} nodes from ${payload.main_file_path || trimmedPath}`);
       setLoadedFilePath(payload.main_file_path || trimmedPath);
+      setWorkspacePath(payload.workspace_path || '');
       setSyntaxErrors([]);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unexpected loading error';
@@ -281,6 +291,27 @@ export default function IbmBobApiArchitectCanvas() {
   const isFunctionNode = selectedNode?.data?.kind === 'function';
   const canSaveFunction = isFunctionNode && Boolean(selectedNode?.data?.function_id);
 
+  // AI Feature Handlers
+  const handleGenerateEndpoint = useCallback((result) => {
+    if (result.success) {
+      setStatus(`✨ Generated endpoint: ${result.file_path}`);
+      // Optionally reload graph to show new endpoint
+      if (loadedFilePath) {
+        loadGraph();
+      }
+    }
+  }, [loadedFilePath, loadGraph]);
+
+  const handleRefactorFunction = useCallback((result) => {
+    if (result.success) {
+      setStatus(`🔧 Refactored function successfully`);
+      // Update the function code in the UI
+      if (result.generated_code) {
+        setFunctionCode(result.generated_code);
+      }
+    }
+  }, []);
+
   return (
     <div className="flex h-screen w-screen flex-col bg-[#161616] text-slate-100">
       <TopBar
@@ -298,6 +329,9 @@ export default function IbmBobApiArchitectCanvas() {
         isLoading={isLoadingGraph}
         status={status}
         loadedFilePath={loadedFilePath}
+        onOpenChatbot={() => setIsChatbotOpen(true)}
+        onOpenGenerateEndpoint={() => setIsGenerateEndpointOpen(true)}
+        onOpenRefactorFunction={() => setIsRefactorFunctionOpen(true)}
       />
 
       <main className="flex min-h-0 flex-1">
@@ -348,6 +382,31 @@ export default function IbmBobApiArchitectCanvas() {
           syntaxErrors={syntaxErrors}
         />
       </main>
+
+      {/* AI Feature Modals */}
+      <AIChatbot
+        isOpen={isChatbotOpen}
+        onClose={() => setIsChatbotOpen(false)}
+        context={{
+          selectedNode: selectedNode?.data?.title,
+          selectedFile: selectedNode?.data?.file,
+          workspacePath: loadedFilePath,
+        }}
+      />
+
+      <AIGenerateEndpoint
+        isOpen={isGenerateEndpointOpen}
+        onClose={() => setIsGenerateEndpointOpen(false)}
+        onGenerated={handleGenerateEndpoint}
+      />
+
+      <AIRefactorFunction
+        isOpen={isRefactorFunctionOpen}
+        onClose={() => setIsRefactorFunctionOpen(false)}
+        selectedNode={selectedNode}
+        workspacePath={workspacePath}
+        onRefactored={handleRefactorFunction}
+      />
     </div>
   );
 }

@@ -13,6 +13,9 @@ export default function TopBar({
   isLoading,
   status,
   loadedFilePath,
+  onOpenChatbot,
+  onOpenGenerateEndpoint,
+  onOpenRefactorFunction,
 }) {
   return (
     <header className="border-b border-[#2f2f3d] bg-[#1e1e2e] px-4 py-3">
@@ -81,6 +84,39 @@ export default function TopBar({
             className="h-8 rounded-md border border-[#6f6f82] px-3 text-xs font-semibold text-slate-200 transition hover:bg-[#2a2a3a] disabled:cursor-not-allowed disabled:opacity-50"
           >
             Delete Selected
+          </button>
+        </div>
+
+        {/* AI Features Section */}
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-[#0f62fe] bg-[#0f62fe]/10 p-2">
+          <span className="text-xs font-medium text-[#78a9ff]">🤖 AI Features:</span>
+          
+          <button
+            type="button"
+            onClick={onOpenChatbot}
+            className="h-8 rounded-md bg-[#0f62fe] px-3 text-xs font-semibold text-white transition hover:bg-[#0353e9]"
+            title="Open AI Assistant Chatbot"
+          >
+            💬 Chat
+          </button>
+
+          <button
+            type="button"
+            onClick={onOpenGenerateEndpoint}
+            className="h-8 rounded-md bg-[#0f62fe] px-3 text-xs font-semibold text-white transition hover:bg-[#0353e9]"
+            title="Generate new endpoint with AI"
+          >
+            ✨ Generate Endpoint
+          </button>
+
+          <button
+            type="button"
+            onClick={onOpenRefactorFunction}
+            disabled={!hasSelectedNode}
+            className="h-8 rounded-md bg-[#0f62fe] px-3 text-xs font-semibold text-white transition hover:bg-[#0353e9] disabled:cursor-not-allowed disabled:opacity-50"
+            title="Refactor selected function with AI"
+          >
+            🔧 Refactor Function
           </button>
         </div>
       </div>
