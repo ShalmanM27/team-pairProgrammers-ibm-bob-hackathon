@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-
+from typing import List
 from services.user_service import (
     archive_user,
     build_users_response,
@@ -13,11 +13,29 @@ app = FastAPI(title="Testing API")
 
 
 @app.get("/api/v1/users")
-def list_users():
-    users = fetch_active_users()
-    print(1)
-    return build_users_response(users)
 
+
+
+
+def list_users() -> List[dict]:
+    """
+    Fetches active users from a database and builds a response containing their details.
+
+    Args:
+        None
+
+    Returns:
+        A list of dictionaries representing user details. Each dictionary contains keys such as 'id', 'name', 'email'.
+
+    Raises:
+        ValueError: If failed to fetch active users.
+    """
+    try:
+        users = fetch_active_users()
+    except Exception as e:
+        raise ValueError("Failed to fetch active users") from e
+    else:
+        return build_users_response(users)
 
 @app.post("/api/v1/users")
 def create_user(payload: dict):
@@ -30,3 +48,15 @@ def create_user(payload: dict):
 def delete_user(user_id: int):
     target = find_user_or_404(user_id)
     return archive_user(target)
+
+def validate_field(cls, v):
+        # Add validation logic
+        return v
+
+def lcm(a, b):
+    return abs(a*b) // math.gcd(a, b)
+
+def gcd(a, b):
+    while b:
+        a, b = b, a % b
+    return a

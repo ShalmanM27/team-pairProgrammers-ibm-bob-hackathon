@@ -1,10 +1,12 @@
-import { useState, useRef, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { requestChatCompletion } from '../lib/apiClient';
 
-export default function AIChatbot({ isOpen, onClose, context }) {
+export default function AIChatbot({ isOpen, onClose, context, selectedModelId }) {
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: '👋 Hi! I\'m your Api-Architect assistant. I can help you generate endpoints, refactor code, and answer questions about your backend architecture.',
+      content:
+        'Hi. Ask me any question about the workspace and I will help with API architecture, refactoring, and endpoint design.',
     },
   ]);
   const [inputMessage, setInputMessage] = useState('');
@@ -24,30 +26,18 @@ export default function AIChatbot({ isOpen, onClose, context }) {
 
     const userMessage = inputMessage.trim();
     setInputMessage('');
-    
-    // Add user message
-    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    setMessages((prev) => [...prev, { role: 'user', content: userMessage }]);
     setIsLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5001/mcp/chat-completion', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: userMessage,
-          context: context || {},
-          conversation_history: messages.slice(-6), // Last 6 messages for context
-        }),
+      const data = await requestChatCompletion({
+        message: userMessage,
+        context: context || {},
+        conversation_history: messages.slice(-6),
+        model_id: selectedModelId || undefined,
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to get response from AI');
-      }
-
-      const data = await response.json();
-      
-      // Add assistant message
-      setMessages(prev => [
+      setMessages((prev) => [
         ...prev,
         {
           role: 'assistant',
@@ -57,11 +47,11 @@ export default function AIChatbot({ isOpen, onClose, context }) {
         },
       ]);
     } catch (error) {
-      setMessages(prev => [
+      setMessages((prev) => [
         ...prev,
         {
           role: 'assistant',
-          content: `❌ Error: ${error.message}. Make sure the MCP server is running on port 5001.`,
+          content: `Error: ${error.message}. Make sure the unified backend is running on port 5000.`,
         },
       ]);
     } finally {
@@ -81,40 +71,32 @@ export default function AIChatbot({ isOpen, onClose, context }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
       <div className="flex h-[600px] w-[700px] flex-col rounded-lg bg-[#1a1d2b] shadow-2xl">
-        {/* Header */}
         <div className="flex items-center justify-between border-b border-[#3a3a4a] p-4">
           <div className="flex items-center gap-2">
-            <span className="text-2xl">🤖</span>
+            <span className="text-2xl">AI</span>
             <div>
               <h2 className="text-lg font-semibold text-slate-100">Api-Architect Assistant</h2>
-              <p className="text-xs text-slate-400">Powered by IBM Granite LLM</p>
+              <p className="text-xs text-slate-400">Ask any question about the workspace</p>
             </div>
           </div>
           <button
             onClick={onClose}
             className="rounded-lg p-2 text-slate-400 hover:bg-[#2a2d3b] hover:text-slate-200"
           >
-            ✕
+            x
           </button>
         </div>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 space-y-4 overflow-y-auto p-4">
           {messages.map((msg, idx) => (
-            <div
-              key={idx}
-              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
+            <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div
                 className={`max-w-[80%] rounded-lg p-3 ${
-                  msg.role === 'user'
-                    ? 'bg-[#0f62fe] text-white'
-                    : 'bg-[#2a2d3b] text-slate-100'
+                  msg.role === 'user' ? 'bg-[#0f62fe] text-white' : 'bg-[#2a2d3b] text-slate-100'
                 }`}
               >
                 <div className="whitespace-pre-wrap text-sm">{msg.content}</div>
-                
-                {/* Code Snippets */}
+
                 {msg.code_snippets?.map((snippet, i) => (
                   <div key={i} className="mt-2 rounded bg-[#161616] p-2">
                     <div className="mb-1 text-xs text-slate-400">{snippet.language}</div>
@@ -124,7 +106,6 @@ export default function AIChatbot({ isOpen, onClose, context }) {
                   </div>
                 ))}
 
-                {/* Action Buttons */}
                 {msg.actions?.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {msg.actions.map((action, i) => (
@@ -141,30 +122,35 @@ export default function AIChatbot({ isOpen, onClose, context }) {
               </div>
             </div>
           ))}
-          
+
           {isLoading && (
             <div className="flex justify-start">
               <div className="rounded-lg bg-[#2a2d3b] p-3">
                 <div className="flex items-center gap-2 text-sm text-slate-400">
                   <div className="h-2 w-2 animate-bounce rounded-full bg-slate-400"></div>
-                  <div className="h-2 w-2 animate-bounce rounded-full bg-slate-400" style={{ animationDelay: '0.2s' }}></div>
-                  <div className="h-2 w-2 animate-bounce rounded-full bg-slate-400" style={{ animationDelay: '0.4s' }}></div>
+                  <div
+                    className="h-2 w-2 animate-bounce rounded-full bg-slate-400"
+                    style={{ animationDelay: '0.2s' }}
+                  ></div>
+                  <div
+                    className="h-2 w-2 animate-bounce rounded-full bg-slate-400"
+                    style={{ animationDelay: '0.4s' }}
+                  ></div>
                 </div>
               </div>
             </div>
           )}
-          
+
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input */}
         <div className="border-t border-[#3a3a4a] p-4">
           <div className="flex gap-2">
             <textarea
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Ask me anything about your API architecture..."
+              placeholder="Ask any question about the workspace..."
               className="flex-1 resize-none rounded-lg border border-[#3a3a4a] bg-[#2a2d3b] p-3 text-sm text-slate-100 placeholder-slate-500 focus:border-[#0f62fe] focus:outline-none"
               rows={2}
               disabled={isLoading}
@@ -177,13 +163,9 @@ export default function AIChatbot({ isOpen, onClose, context }) {
               Send
             </button>
           </div>
-          <div className="mt-2 text-xs text-slate-500">
-            Press Enter to send, Shift+Enter for new line
-          </div>
+          <div className="mt-2 text-xs text-slate-500">Press Enter to send, Shift+Enter for new line</div>
         </div>
       </div>
     </div>
   );
 }
-
-// Made with Bob

@@ -1,0 +1,13 @@
+{
+  "id": "2026-05-16T14-56-47.839164_9eefba51",
+  "timestamp": "2026-05-16T14:56:47.839164",
+  "file_path": "D:\\projects\\IBM\\testing\\services\\user_service.py",
+  "operation": "refactor_function_build_users_response",
+  "content": "from fastapi import HTTPException\n\nUSERS = [\n    {\"id\": 1, \"name\": \"Ada\", \"active\": True},\n    {\"id\": 2, \"name\": \"Linus\", \"active\": False},\n    {\"id\": 3, \"name\": \"Grace\", \"active\": True},\n]\n\n\nfrom typing import List, Dict\nfrom fastapi import HTTPException\n\n# Define a constant for the list of users\nUSERS: List[Dict] = [\n    {\"id\": 1, \"name\": \"Ada\", \"active\": True},\n    {\"id\": 2, \"name\": \"Linus\", \"active\": False},\n    {\"id\": 3, \"name\": \"Grace\", \"active\": True},\n]\n\ndef fetch_active_users() -> List[Dict]:\n    \"\"\"\n    Fetches active users from the list.\n\n    Returns:\n        A list of dictionaries representing active users.\n    \"\"\"\n    # Use list comprehension to filter out inactive users\n    return [user for user in USERS if user.get(\"active\")]  # get method provides default value of None if key is missing\n\n\n\n\ndef build_users_response(users):\n    return {\"count\": len(users), \"users\": users}\n\n\ndef persist_user(payload):\n    new_user = {\"id\": len(USERS) + 1, \"name\": payload[\"name\"], \"active\": True}\n    USERS.append(new_user)\n    return new_user\n\n\ndef find_user_or_404(user_id):\n    for user in USERS:\n        if user[\"id\"] == user_id:\n            return user\n    raise HTTPException(status_code=404, detail=\"user not yet found\")\n\n\ndef archive_user(user):\n    user[\"active\"] = False\n    return {\"deleted\": user[\"id\"], \"active\": user[\"active\"]}\n",
+  "content_hash": "9eefba51d2389709b7813b7986089a54b98b64fb47a90278ac660235d4e64c07",
+  "metadata": {
+    "function_name": "build_users_response",
+    "refactor_goal": "enhance documentation",
+    "model_id": "ibm/granite-8b-code-instruct"
+  }
+}

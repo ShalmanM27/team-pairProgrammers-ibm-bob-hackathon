@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Background,
   Controls,
@@ -15,7 +15,35 @@ import TopBar from './components/TopBar';
 import AIChatbot from './components/AIChatbot';
 import AIGenerateEndpoint from './components/AIGenerateEndpoint';
 import AIRefactorFunction from './components/AIRefactorFunction';
-import { loadMainFileGraph, saveFunctionContent } from './lib/apiClient';
+import { fetchModelCatalog, loadMainFileGraph, saveFunctionContent } from './lib/apiClient';
+
+const FALLBACK_MODEL_IDS = [
+  'cross-encoder/ms-marco-minilm-l-12-v2',
+  'ibm/granite-3-1-8b-base',
+  'ibm/granite-3-8b-instruct',
+  'ibm/granite-4-h-small',
+  'ibm/granite-8b-code-instruct',
+  'ibm/granite-embedding-278m-multilingual',
+  'ibm/granite-guardian-3-8b',
+  'ibm/granite-ttm-1024-96-r2',
+  'ibm/granite-ttm-1536-96-r2',
+  'ibm/granite-ttm-512-96-r2',
+  'ibm/slate-125m-english-rtrvr-v2',
+  'ibm/slate-30m-english-rtrvr-v2',
+  'intfloat/multilingual-e5-large',
+  'meta-llama/llama-3-1-70b-gptq',
+  'meta-llama/llama-3-1-8b',
+  'meta-llama/llama-3-2-11b-vision-instruct',
+  'meta-llama/llama-3-2-90b-vision-instruct',
+  'meta-llama/llama-3-3-70b-instruct',
+  'meta-llama/llama-4-maverick-17b-128e-instruct-fp8',
+  'meta-llama/llama-guard-3-11b-vision',
+  'mistral-large-2512',
+  'mistralai/mistral-medium-2505',
+  'mistralai/mistral-small-3-1-24b-instruct-2503',
+  'openai/gpt-oss-120b',
+  'sentence-transformers/all-minilm-l6-v2',
+];
 
 export default function IbmBobApiArchitectCanvas() {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
@@ -40,6 +68,54 @@ export default function IbmBobApiArchitectCanvas() {
   const [isChatbotOpen, setIsChatbotOpen] = useState(false);
   const [isGenerateEndpointOpen, setIsGenerateEndpointOpen] = useState(false);
   const [isRefactorFunctionOpen, setIsRefactorFunctionOpen] = useState(false);
+  const [availableModels, setAvailableModels] = useState([]);
+  const [selectedModelId, setSelectedModelId] = useState('');
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
+  const [modelsSource, setModelsSource] = useState('fallback');
+  const [modelsError, setModelsError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadModels = async () => {
+      setIsLoadingModels(true);
+      setModelsError('');
+      try {
+        const data = await fetchModelCatalog();
+        const models = Array.isArray(data?.models) ? data.models : [];
+        const modelIds = models
+          .map((item) => (typeof item === 'string' ? item : item?.id))
+          .filter(Boolean);
+
+        if (!modelIds.length) {
+          throw new Error('No models returned by server');
+        }
+
+        if (!cancelled) {
+          setAvailableModels(modelIds);
+          setSelectedModelId((prev) => (modelIds.includes(prev) ? prev : (data?.default_model_id || modelIds[0])));
+          setModelsSource(data?.source || 'live');
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setAvailableModels(FALLBACK_MODEL_IDS);
+          setSelectedModelId((prev) => (FALLBACK_MODEL_IDS.includes(prev) ? prev : FALLBACK_MODEL_IDS[0]));
+          setModelsSource('fallback');
+          setModelsError('Could not load model catalog from backend. Using fallback list.');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingModels(false);
+        }
+      }
+    };
+
+    loadModels();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const createNodeVisual = useCallback((kind, label) => {
     if (kind === 'input') {
@@ -249,6 +325,36 @@ export default function IbmBobApiArchitectCanvas() {
     }
   }, []);
 
+  const persistFunctionContent = useCallback(
+    async (functionId, content, successStatus) => {
+      const payload = await saveFunctionContent(functionId, content);
+      const returnedErrors = payload.syntax_errors || [];
+      setSyntaxErrors(returnedErrors);
+
+      if (payload.has_syntax_errors) {
+        setStatus(`${successStatus} with ${returnedErrors.length} syntax error(s).`);
+        return payload;
+      }
+
+      if (payload.graph) {
+        applyGraphPayload(payload.graph, `${successStatus} and graph refreshed.`);
+        const refreshedNode = payload.graph.nodes?.find(
+          (node) => node?.data?.function_id === functionId,
+        );
+        if (refreshedNode) {
+          setSelectedNode(refreshedNode);
+          setFunctionCode(refreshedNode?.data?.code || '');
+          setActiveFunctionId(refreshedNode?.data?.function_id || functionId);
+        }
+      } else {
+        setStatus(successStatus);
+      }
+
+      return payload;
+    },
+    [applyGraphPayload],
+  );
+
   const saveCurrentFunction = useCallback(async () => {
     if (!activeFunctionId) {
       setStatus('Error: Select a function node before saving.');
@@ -259,34 +365,14 @@ export default function IbmBobApiArchitectCanvas() {
     setStatus('Saving function content...');
 
     try {
-      const payload = await saveFunctionContent(activeFunctionId, functionCode);
-      const returnedErrors = payload.syntax_errors || [];
-      setSyntaxErrors(returnedErrors);
-
-      if (payload.has_syntax_errors) {
-        setStatus(`Saved with ${returnedErrors.length} syntax error(s).`);
-        return;
-      }
-
-      if (payload.graph) {
-        applyGraphPayload(payload.graph, 'Function saved and graph refreshed.');
-        const refreshedNode = payload.graph.nodes?.find(
-          (node) => node?.data?.function_id === activeFunctionId,
-        );
-        if (refreshedNode) {
-          setSelectedNode(refreshedNode);
-          setFunctionCode(refreshedNode?.data?.code || '');
-        }
-      } else {
-        setStatus('Function saved.');
-      }
+      await persistFunctionContent(activeFunctionId, functionCode, 'Function saved');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unexpected save error';
       setStatus(`Error: ${message}`);
     } finally {
       setIsSaving(false);
     }
-  }, [activeFunctionId, applyGraphPayload, functionCode]);
+  }, [activeFunctionId, functionCode, persistFunctionContent]);
 
   const isFunctionNode = selectedNode?.data?.kind === 'function';
   const canSaveFunction = isFunctionNode && Boolean(selectedNode?.data?.function_id);
@@ -304,13 +390,33 @@ export default function IbmBobApiArchitectCanvas() {
 
   const handleRefactorFunction = useCallback((result) => {
     if (result.success) {
-      setStatus(`🔧 Refactored function successfully`);
-      // Update the function code in the UI
+      setStatus('Refactored function generated successfully.');
       if (result.generated_code) {
         setFunctionCode(result.generated_code);
       }
     }
   }, []);
+
+  const handleApplyRefactor = useCallback(
+    async ({ functionId, generatedCode }) => {
+      const resolvedFunctionId = functionId || activeFunctionId || selectedNode?.data?.function_id || '';
+      if (!resolvedFunctionId) {
+        throw new Error('No function_id available to apply refactoring.');
+      }
+      if (!generatedCode?.trim()) {
+        throw new Error('Generated refactored code is empty.');
+      }
+
+      setIsSaving(true);
+      setStatus('Applying refactored function to source file...');
+      try {
+        await persistFunctionContent(resolvedFunctionId, generatedCode, 'Refactored function applied');
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [activeFunctionId, persistFunctionContent, selectedNode],
+  );
 
   return (
     <div className="flex h-screen w-screen flex-col bg-[#161616] text-slate-100">
@@ -332,6 +438,12 @@ export default function IbmBobApiArchitectCanvas() {
         onOpenChatbot={() => setIsChatbotOpen(true)}
         onOpenGenerateEndpoint={() => setIsGenerateEndpointOpen(true)}
         onOpenRefactorFunction={() => setIsRefactorFunctionOpen(true)}
+        availableModels={availableModels}
+        selectedModelId={selectedModelId}
+        onSelectedModelIdChange={setSelectedModelId}
+        isLoadingModels={isLoadingModels}
+        modelsSource={modelsSource}
+        modelsError={modelsError}
       />
 
       <main className="flex min-h-0 flex-1">
@@ -387,6 +499,7 @@ export default function IbmBobApiArchitectCanvas() {
       <AIChatbot
         isOpen={isChatbotOpen}
         onClose={() => setIsChatbotOpen(false)}
+        selectedModelId={selectedModelId}
         context={{
           selectedNode: selectedNode?.data?.title,
           selectedFile: selectedNode?.data?.file,
@@ -398,6 +511,8 @@ export default function IbmBobApiArchitectCanvas() {
         isOpen={isGenerateEndpointOpen}
         onClose={() => setIsGenerateEndpointOpen(false)}
         onGenerated={handleGenerateEndpoint}
+        defaultTargetFile={loadedFilePath || 'backend/main.py'}
+        selectedModelId={selectedModelId}
       />
 
       <AIRefactorFunction
@@ -406,6 +521,12 @@ export default function IbmBobApiArchitectCanvas() {
         selectedNode={selectedNode}
         workspacePath={workspacePath}
         onRefactored={handleRefactorFunction}
+        onApplyRefactor={handleApplyRefactor}
+        selectedModelId={selectedModelId}
+        availableModels={availableModels}
+        isLoadingModels={isLoadingModels}
+        modelsSource={modelsSource}
+        modelsError={modelsError}
       />
     </div>
   );

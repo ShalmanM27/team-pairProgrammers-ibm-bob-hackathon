@@ -1,0 +1,14 @@
+{
+  "id": "2026-05-16T15-07-40.378714_0f35aac6",
+  "timestamp": "2026-05-16T15:07:40.378714",
+  "file_path": "D:\\projects\\IBM\\testing\\sample_api.py",
+  "operation": "generate_endpoint_GET_/api/v1/",
+  "content": "from fastapi import FastAPI\nfrom typing import List\nfrom services.user_service import (\n    archive_user,\n    build_users_response,\n    fetch_active_users,\n    find_user_or_404,\n    persist_user,\n)\nfrom services.validators import validate_create_payload\n\napp = FastAPI(title=\"Testing API\")\n\n\n@app.get(\"/api/v1/users\")\ndef list_users() -> List[dict]:\n    \"\"\"\n    Fetches active users from a database and builds a response containing their details.\n\n    Args:\n        None\n\n    Returns:\n        A list of dictionaries representing user details. Each dictionary contains keys such as 'id', 'name', 'email'.\n    \"\"\"\n    try:\n        users = fetch_active_users()\n    except Exception as e:\n        raise ValueError(\"Failed to fetch active users\") from e\n    else:\n        return build_users_response(users)\n\n@app.post(\"/api/v1/users\")\ndef create_user(payload: dict):\n    validate_create_payload(payload)\n    created = persist_user(payload)\n    return {\"created\": created}\n\n\n@app.delete(\"/api/v1/users/{user_id}\")\ndef delete_user(user_id: int):\n    target = find_user_or_404(user_id)\n    return archive_user(target)\n",
+  "content_hash": "0f35aac6303bb5bd921fc0e1e11c49963ade0549e4291b76fd477ae86a9519ef",
+  "metadata": {
+    "method": "GET",
+    "path": "/api/v1/",
+    "description": "input 2 number and output multiply",
+    "model_id": "ibm/granite-8b-code-instruct"
+  }
+}

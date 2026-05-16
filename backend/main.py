@@ -1,6 +1,7 @@
 import ast
 import builtins
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -8,10 +9,11 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 app = FastAPI(title="IBM Bob API Architect Canvas Bridge")
+logger = logging.getLogger(__name__)
 
 # Allow local frontend apps to call this bridge server from any origin.
 app.add_middleware(
@@ -21,6 +23,50 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+MCP_ROUTES_ATTACHED = False
+LANGCHAIN_AGENT_READY = False
+AutonomousWorkspaceAgent = None
+LANGCHAIN_DEFAULT_MODEL_ID = "ibm/granite-8b-code-instruct"
+LANGCHAIN_DEFAULT_MAX_ITERATIONS = 24
+LANGCHAIN_DEFAULT_WATSONX_URL = "https://us-south.ml.cloud.ibm.com"
+
+# Mount MCP routes into the same backend process.
+try:
+    try:
+        from mcp_service import app as mcp_app
+    except ModuleNotFoundError:
+        from backend.mcp_service import app as mcp_app
+
+    app.include_router(mcp_app.router)
+    MCP_ROUTES_ATTACHED = True
+except Exception as exc:  # noqa: BLE001
+    logger.warning("MCP routes could not be attached to main backend app: %s", exc)
+
+# Initialize LangChain agent service in this same process.
+try:
+    try:
+        from langchain_agent_service import (
+            AutonomousWorkspaceAgent as _AutonomousWorkspaceAgent,
+            DEFAULT_MAX_ITERATIONS as _AGENT_DEFAULT_MAX_ITERATIONS,
+            DEFAULT_MODEL_ID as _AGENT_DEFAULT_MODEL_ID,
+            DEFAULT_WATSONX_URL as _AGENT_DEFAULT_WATSONX_URL,
+        )
+    except ModuleNotFoundError:
+        from backend.langchain_agent_service import (
+            AutonomousWorkspaceAgent as _AutonomousWorkspaceAgent,
+            DEFAULT_MAX_ITERATIONS as _AGENT_DEFAULT_MAX_ITERATIONS,
+            DEFAULT_MODEL_ID as _AGENT_DEFAULT_MODEL_ID,
+            DEFAULT_WATSONX_URL as _AGENT_DEFAULT_WATSONX_URL,
+        )
+
+    AutonomousWorkspaceAgent = _AutonomousWorkspaceAgent
+    LANGCHAIN_DEFAULT_MODEL_ID = _AGENT_DEFAULT_MODEL_ID
+    LANGCHAIN_DEFAULT_MAX_ITERATIONS = _AGENT_DEFAULT_MAX_ITERATIONS
+    LANGCHAIN_DEFAULT_WATSONX_URL = _AGENT_DEFAULT_WATSONX_URL
+    LANGCHAIN_AGENT_READY = True
+except Exception as exc:  # noqa: BLE001
+    logger.warning("LangChain agent service could not be initialized: %s", exc)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 TESTING_WORKSPACE_PATH = PROJECT_ROOT / "testing"
@@ -55,6 +101,26 @@ class FileSavePayload(BaseModel):
 class FunctionSavePayload(BaseModel):
     function_id: str
     content: str
+
+
+class AgentExecutionPayload(BaseModel):
+    target_file: str = Field(..., description="Primary file path to inspect first.")
+    change_request: str = Field(..., description="Architecture/code change request.")
+    workspace_root: Optional[str] = Field(
+        default=None,
+        description="Workspace root for tool access. Defaults to active workspace or project root.",
+    )
+    model_id: Optional[str] = Field(
+        default=None,
+        description=f"watsonx model ID (default: {LANGCHAIN_DEFAULT_MODEL_ID}).",
+    )
+    max_iterations: int = Field(
+        default=LANGCHAIN_DEFAULT_MAX_ITERATIONS,
+        ge=1,
+        le=100,
+        description="Maximum agent reasoning/tool iterations.",
+    )
+    verbose: bool = Field(default=False, description="Enable per-iteration logs.")
 
 
 def _safe_relative(file_path: Path, root: Path) -> str:
@@ -106,6 +172,46 @@ def _resolve_requested_file(path_value: str, workspace_root: Path, must_exist: b
         raise HTTPException(status_code=404, detail="Requested file does not exist.")
 
     return resolved
+
+
+def _resolve_agent_workspace_root(workspace_root: Optional[str]) -> Path:
+    if workspace_root and workspace_root.strip():
+        candidate = Path(workspace_root.strip()).expanduser()
+        resolved = candidate.resolve() if candidate.is_absolute() else (PROJECT_ROOT / candidate).resolve()
+    elif CURRENT_WORKSPACE_PATH:
+        resolved = Path(CURRENT_WORKSPACE_PATH).resolve()
+    else:
+        resolved = PROJECT_ROOT.resolve()
+
+    if not resolved.exists() or not resolved.is_dir():
+        raise HTTPException(status_code=400, detail=f"Invalid workspace root: {resolved}")
+    if not _is_within(resolved, PROJECT_ROOT):
+        raise HTTPException(status_code=400, detail="Workspace root must stay inside project root.")
+    return resolved
+
+
+def _load_langchain_runtime_config() -> Dict[str, str]:
+    api_key = os.getenv("WATSONX_API_KEY") or os.getenv("WATSONX_APIKEY")
+    project_id = os.getenv("WATSONX_PROJECT_ID")
+    url = os.getenv("WATSONX_URL") or LANGCHAIN_DEFAULT_WATSONX_URL
+
+    missing: List[str] = []
+    if not api_key:
+        missing.append("WATSONX_API_KEY")
+    if not project_id:
+        missing.append("WATSONX_PROJECT_ID")
+    if missing:
+        missing_display = ", ".join(missing)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Missing required environment variables for LangChain agent: {missing_display}",
+        )
+
+    return {
+        "watsonx_api_key": api_key.strip(),
+        "watsonx_project_id": project_id.strip(),
+        "watsonx_url": url.strip(),
+    }
 
 
 def _should_skip(file_path: Path) -> bool:
@@ -736,6 +842,63 @@ def _build_workspace_graph(workspace_path: str, main_file_path: Optional[str] = 
         "source_files": [_safe_relative(path, workspace_root) for path in python_files],
         "nodes": nodes,
         "edges": edges,
+    }
+
+
+@app.on_event("startup")
+async def log_runtime_components() -> None:
+    logger.info("Unified backend startup complete.")
+    logger.info("Main API bridge active: True")
+    logger.info("MCP routes attached: %s", MCP_ROUTES_ATTACHED)
+    logger.info("LangChain agent ready: %s", LANGCHAIN_AGENT_READY)
+
+
+@app.get("/api/runtime-status")
+async def runtime_status() -> Dict[str, Any]:
+    return {
+        "backend_active": True,
+        "mcp_routes_attached": MCP_ROUTES_ATTACHED,
+        "langchain_agent_ready": LANGCHAIN_AGENT_READY,
+        "entrypoint": "backend/main.py",
+    }
+
+
+@app.post("/api/agent/execute")
+async def execute_langchain_agent(payload: AgentExecutionPayload) -> Dict[str, Any]:
+    if not LANGCHAIN_AGENT_READY or AutonomousWorkspaceAgent is None:
+        raise HTTPException(
+            status_code=503,
+            detail="LangChain agent service is not available in this runtime.",
+        )
+
+    workspace_root = _resolve_agent_workspace_root(payload.workspace_root)
+    runtime_config = _load_langchain_runtime_config()
+
+    model_id = payload.model_id.strip() if payload.model_id and payload.model_id.strip() else LANGCHAIN_DEFAULT_MODEL_ID
+
+    try:
+        agent = AutonomousWorkspaceAgent(
+            workspace_root=workspace_root,
+            model_id=model_id,
+            watsonx_url=runtime_config["watsonx_url"],
+            watsonx_project_id=runtime_config["watsonx_project_id"],
+            watsonx_api_key=runtime_config["watsonx_api_key"],
+            max_iterations=payload.max_iterations,
+            verbose=payload.verbose,
+        )
+        result = agent.run(
+            target_file=payload.target_file,
+            change_request=payload.change_request,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"LangChain agent execution failed: {exc}") from exc
+
+    return {
+        "status": "success",
+        "workspace_root": str(workspace_root),
+        "result": result,
     }
 
 

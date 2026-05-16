@@ -1,4 +1,4 @@
-const BRIDGE_BASE_URL = 'http://localhost:5000';
+export const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
 async function parseResponse(response) {
   const payload = await response.json().catch(() => ({}));
@@ -10,7 +10,7 @@ async function parseResponse(response) {
 }
 
 export async function loadMainFileGraph(path) {
-  const response = await fetch(`${BRIDGE_BASE_URL}/api/load-main-file`, {
+  const response = await fetch(`${BACKEND_BASE_URL}/api/load-main-file`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path }),
@@ -19,14 +19,14 @@ export async function loadMainFileGraph(path) {
 }
 
 export async function fetchFileContent(path) {
-  const url = new URL(`${BRIDGE_BASE_URL}/api/file-content`);
+  const url = new URL(`${BACKEND_BASE_URL}/api/file-content`);
   url.searchParams.set('path', path);
   const response = await fetch(url.toString());
   return parseResponse(response);
 }
 
 export async function saveFileContent(path, content) {
-  const response = await fetch(`${BRIDGE_BASE_URL}/api/save-file`, {
+  const response = await fetch(`${BACKEND_BASE_URL}/api/save-file`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path, content }),
@@ -35,10 +35,42 @@ export async function saveFileContent(path, content) {
 }
 
 export async function saveFunctionContent(functionId, content) {
-  const response = await fetch(`${BRIDGE_BASE_URL}/api/save-function-content`, {
+  const response = await fetch(`${BACKEND_BASE_URL}/api/save-function-content`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ function_id: functionId, content }),
+  });
+  return parseResponse(response);
+}
+
+export async function fetchModelCatalog() {
+  const response = await fetch(`${BACKEND_BASE_URL}/mcp/models`);
+  return parseResponse(response);
+}
+
+export async function requestEndpointGeneration(payload) {
+  const response = await fetch(`${BACKEND_BASE_URL}/mcp/generate-endpoint`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return parseResponse(response);
+}
+
+export async function requestFunctionRefactor(payload) {
+  const response = await fetch(`${BACKEND_BASE_URL}/mcp/refactor-function`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return parseResponse(response);
+}
+
+export async function requestChatCompletion(payload) {
+  const response = await fetch(`${BACKEND_BASE_URL}/mcp/chat-completion`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
   });
   return parseResponse(response);
 }

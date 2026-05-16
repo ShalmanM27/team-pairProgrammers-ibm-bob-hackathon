@@ -16,6 +16,12 @@ export default function TopBar({
   onOpenChatbot,
   onOpenGenerateEndpoint,
   onOpenRefactorFunction,
+  availableModels,
+  selectedModelId,
+  onSelectedModelIdChange,
+  isLoadingModels,
+  modelsSource,
+  modelsError,
 }) {
   return (
     <header className="border-b border-[#2f2f3d] bg-[#1e1e2e] px-4 py-3">
@@ -87,17 +93,30 @@ export default function TopBar({
           </button>
         </div>
 
-        {/* AI Features Section */}
         <div className="flex flex-wrap items-center gap-2 rounded-md border border-[#0f62fe] bg-[#0f62fe]/10 p-2">
-          <span className="text-xs font-medium text-[#78a9ff]">🤖 AI Features:</span>
-          
+          <span className="text-xs font-medium text-[#78a9ff]">AI Features:</span>
+
+          <select
+            value={selectedModelId}
+            onChange={(event) => onSelectedModelIdChange?.(event.target.value)}
+            disabled={isLoadingModels || !(availableModels || []).length}
+            className="h-8 min-w-[260px] rounded-md border border-[#3a3a4a] bg-[#10131d] px-2 text-xs text-slate-100 outline-none transition focus:border-[#0f62fe] disabled:cursor-not-allowed disabled:opacity-60"
+            title="Global model for Chat, Generate Endpoint, and Refactor Function"
+          >
+            {(availableModels || []).map((modelId) => (
+              <option key={modelId} value={modelId}>
+                {modelId}
+              </option>
+            ))}
+          </select>
+
           <button
             type="button"
             onClick={onOpenChatbot}
             className="h-8 rounded-md bg-[#0f62fe] px-3 text-xs font-semibold text-white transition hover:bg-[#0353e9]"
-            title="Open AI Assistant Chatbot"
+            title="Open AI assistant chatbot"
           >
-            💬 Chat
+            Chat
           </button>
 
           <button
@@ -106,7 +125,7 @@ export default function TopBar({
             className="h-8 rounded-md bg-[#0f62fe] px-3 text-xs font-semibold text-white transition hover:bg-[#0353e9]"
             title="Generate new endpoint with AI"
           >
-            ✨ Generate Endpoint
+            Generate Endpoint
           </button>
 
           <button
@@ -116,12 +135,16 @@ export default function TopBar({
             className="h-8 rounded-md bg-[#0f62fe] px-3 text-xs font-semibold text-white transition hover:bg-[#0353e9] disabled:cursor-not-allowed disabled:opacity-50"
             title="Refactor selected function with AI"
           >
-            🔧 Refactor Function
+            Refactor Function
           </button>
         </div>
       </div>
 
       <p className="mt-2 text-xs text-slate-400">{status}</p>
+      <p className="mt-1 text-xs text-slate-500">
+        {isLoadingModels ? 'Loading models...' : `Model source: ${modelsSource || 'unknown'}`}
+      </p>
+      {modelsError ? <p className="mt-1 text-xs text-amber-400">{modelsError}</p> : null}
       {loadedFilePath ? <p className="mt-1 text-xs text-slate-500">{loadedFilePath}</p> : null}
     </header>
   );

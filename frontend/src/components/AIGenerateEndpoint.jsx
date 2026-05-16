@@ -1,15 +1,21 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { requestEndpointGeneration } from '../lib/apiClient';
 
-export default function AIGenerateEndpoint({ isOpen, onClose, onGenerated }) {
+export default function AIGenerateEndpoint({ isOpen, onClose, onGenerated, defaultTargetFile, selectedModelId }) {
   const [method, setMethod] = useState('GET');
   const [path, setPath] = useState('/api/v1/');
   const [description, setDescription] = useState('');
-  const [targetFile, setTargetFile] = useState('backend/main.py');
+  const [targetFile, setTargetFile] = useState(defaultTargetFile || 'backend/main.py');
   const [includeTests, setIncludeTests] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState(null);
 
   const httpMethods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'];
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setTargetFile(defaultTargetFile || 'backend/main.py');
+  }, [isOpen, defaultTargetFile]);
 
   const generateEndpoint = async () => {
     if (!path.trim() || !description.trim()) {
@@ -21,24 +27,14 @@ export default function AIGenerateEndpoint({ isOpen, onClose, onGenerated }) {
     setResult(null);
 
     try {
-      const response = await fetch('http://localhost:5001/mcp/generate-endpoint', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          method,
-          path: path.trim(),
-          description: description.trim(),
-          target_file: targetFile.trim() || null,
-          include_tests: includeTests,
-        }),
+      const data = await requestEndpointGeneration({
+        method,
+        path: path.trim(),
+        description: description.trim(),
+        target_file: targetFile.trim() || null,
+        include_tests: includeTests,
+        model_id: selectedModelId || undefined,
       });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Generation failed');
-      }
-
-      const data = await response.json();
       setResult(data);
       
       if (onGenerated) {
@@ -47,7 +43,7 @@ export default function AIGenerateEndpoint({ isOpen, onClose, onGenerated }) {
     } catch (error) {
       setResult({
         success: false,
-        explanation: `Error: ${error.message}. Make sure the MCP server is running on port 5001.`,
+        explanation: `Error: ${error.message}. Make sure the unified backend is running on port 5000.`,
       });
     } finally {
       setIsGenerating(false);

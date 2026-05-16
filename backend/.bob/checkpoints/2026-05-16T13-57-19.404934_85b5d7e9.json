@@ -1,0 +1,13 @@
+{
+  "id": "2026-05-16T13-57-19.404934_85b5d7e9",
+  "timestamp": "2026-05-16T13:57:19.404934",
+  "file_path": "D:\\projects\\IBM\\testing\\services\\user_service.py",
+  "operation": "refactor_function_fetch_active_users",
+  "content": "from fastapi import HTTPException\n\nUSERS = [\n    {\"id\": 1, \"name\": \"Ada\", \"active\": True},\n    {\"id\": 2, \"name\": \"Linus\", \"active\": False},\n    {\"id\": 3, \"name\": \"Grace\", \"active\": True},\n]\n\n\ndef fetch_active_users():\n    return [user for user in USERS if user[\"active\"]]\n\n\ndef build_users_response(users):\n    return {\"count\": len(users), \"users\": users}\n\n\ndef persist_user(payload):\n    new_user = {\"id\": len(USERS) + 1, \"name\": payload[\"name\"], \"active\": True}\n    USERS.append(new_user)\n    return new_user\n\n\ndef find_user_or_404(user_id):\n    for user in USERS:\n        if user[\"id\"] == user_id:\n            return user\n    raise HTTPException(status_code=404, detail=\"user not yet found\")\n\n\ndef archive_user(user):\n    user[\"active\"] = False\n    return {\"deleted\": user[\"id\"], \"active\": user[\"active\"]}\n",
+  "content_hash": "85b5d7e9fd093efa0fb2e20f71fd455d429265ad64fb60d9c29edc0202e5e84a",
+  "metadata": {
+    "function_name": "fetch_active_users",
+    "refactor_goal": "improve readability",
+    "model_id": "meta-llama/llama-3-3-70b-instruct"
+  }
+}
