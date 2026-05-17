@@ -3,6 +3,9 @@ import builtins
 import json
 import logging
 import os
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -71,12 +74,45 @@ except Exception as exc:  # noqa: BLE001
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 TESTING_WORKSPACE_PATH = PROJECT_ROOT / "testing"
 HTTP_DECORATORS = {"get", "post", "put", "delete", "patch"}
-EXCLUDED_PARTS = {".venv", "__pycache__", "node_modules", ".bob", ".git"}
+
+try:
+    try:
+        from language_parsers import (
+            detect_language as _lp_detect_language,
+            detect_main_file as _lp_detect_main_file,
+            detect_project_root as _lp_detect_project_root,
+            collect_workspace_code_files as _lp_collect_files,
+            parse_workspace_files as _lp_parse_workspace_files,
+            make_virtual_endpoints as _lp_make_virtual_endpoints,
+            EXCLUDED_DIR_NAMES as _LP_EXCLUDED,
+        )
+    except ModuleNotFoundError:
+        from backend.language_parsers import (
+            detect_language as _lp_detect_language,
+            detect_main_file as _lp_detect_main_file,
+            detect_project_root as _lp_detect_project_root,
+            collect_workspace_code_files as _lp_collect_files,
+            parse_workspace_files as _lp_parse_workspace_files,
+            make_virtual_endpoints as _lp_make_virtual_endpoints,
+            EXCLUDED_DIR_NAMES as _LP_EXCLUDED,
+        )
+    MULTILANG_READY = True
+except Exception as _lp_exc:  # noqa: BLE001
+    logger.warning("language_parsers not available — Python-only mode: %s", _lp_exc)
+    MULTILANG_READY = False
+    _LP_EXCLUDED: Set[str] = set()
+
+EXCLUDED_PARTS = {".venv", "__pycache__", "node_modules", ".bob", ".git",
+                  "dist", "build", ".next", "out", "target", "vendor",
+                  ".gradle", ".mvn", "bin", "obj", ".vs", "coverage",
+                  ".pytest_cache", ".mypy_cache", ".tox", "htmlcov"} | _LP_EXCLUDED
 
 # Global runtime state for currently loaded workspace/file.
 CURRENT_WORKSPACE_PATH: str = ""
 CURRENT_MAIN_FILE_PATH: str = ""
 CURRENT_GRAPH_FILES: List[str] = []
+# Temp directory used when a GitHub repo is cloned on-demand.
+_TEMP_CLONE_DIR: Optional[str] = None
 
 
 class WorkspacePayload(BaseModel):
@@ -150,12 +186,73 @@ def _validate_workspace_path(path_value: str) -> Path:
 def _validate_main_file_path(path_value: str) -> Path:
     main_file = Path(path_value).resolve()
     if not main_file.exists():
-        raise HTTPException(status_code=400, detail="Main Python file path does not exist!")
+        raise HTTPException(status_code=400, detail="File path does not exist!")
     if not main_file.is_file():
         raise HTTPException(status_code=400, detail="Provided path is not a file!")
-    if main_file.suffix.lower() != ".py":
-        raise HTTPException(status_code=400, detail="Provided file must be a Python (.py) file!")
     return main_file
+
+
+def _is_github_url(value: str) -> bool:
+    stripped = value.strip()
+    return stripped.startswith(("https://", "http://", "git@", "ssh://"))
+
+
+def _clone_github_repo(url: str) -> Path:
+    global _TEMP_CLONE_DIR
+    if _TEMP_CLONE_DIR and Path(_TEMP_CLONE_DIR).exists():
+        shutil.rmtree(_TEMP_CLONE_DIR, ignore_errors=True)
+    temp_dir = tempfile.mkdtemp(prefix="ibmbob_clone_")
+    _TEMP_CLONE_DIR = temp_dir
+    try:
+        subprocess.run(
+            ["git", "clone", "--depth=1", "--single-branch", url, temp_dir],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    except subprocess.CalledProcessError as exc:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        _TEMP_CLONE_DIR = None
+        raise HTTPException(status_code=400, detail=f"Git clone failed: {exc.stderr.strip()}") from exc
+    except subprocess.TimeoutExpired:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        _TEMP_CLONE_DIR = None
+        raise HTTPException(status_code=408, detail="Git clone timed out after 120 seconds.")
+    return Path(temp_dir)
+
+
+_ENTRY_CANDIDATES = [
+    "main.py", "app.py", "server.py", "api.py",
+    "wsgi.py", "asgi.py", "manage.py", "run.py",
+]
+_ENTRY_SUBDIRS = ["src", "app", "backend", "api", "server"]
+
+
+def _detect_main_python_file(workspace: Path) -> Optional[Path]:
+    if MULTILANG_READY:
+        return _lp_detect_main_file(workspace)
+    for name in _ENTRY_CANDIDATES:
+        candidate = workspace / name
+        if candidate.exists():
+            return candidate
+    for subdir in _ENTRY_SUBDIRS:
+        subpath = workspace / subdir
+        if subpath.is_dir():
+            for name in _ENTRY_CANDIDATES:
+                candidate = subpath / name
+                if candidate.exists():
+                    return candidate
+    for py_file in sorted(workspace.rglob("*.py")):
+        if _should_skip(py_file):
+            continue
+        try:
+            content = py_file.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        if "@app.get" in content or "@app.post" in content or "@router.get" in content:
+            return py_file
+    return None
 
 
 def _resolve_requested_file(path_value: str, workspace_root: Path, must_exist: bool = False) -> Path:
@@ -468,22 +565,42 @@ def _collect_imported_python_files(
 def _resolve_graph_context(workspace_path: str, main_file_path: Optional[str]) -> Tuple[Path, List[Path]]:
     if main_file_path:
         main_file = _validate_main_file_path(main_file_path)
-        workspace_root = main_file.parent.resolve()
-        python_files = _collect_imported_python_files(main_file, workspace_root, strict=True)
+        lang = _lp_detect_language(main_file) if MULTILANG_READY else "python"
+
+        if lang == "python" or not MULTILANG_READY:
+            # Walk up to find the real project root (e.g. the dir containing
+            # requirements.txt) so that package-style imports like
+            # "from app.routers import feed" resolve correctly.
+            workspace_root = (
+                _lp_detect_project_root(main_file)
+                if MULTILANG_READY
+                else main_file.parent.resolve()
+            )
+            source_files = _collect_imported_python_files(main_file, workspace_root, strict=True)
+        else:
+            workspace_root = _lp_detect_project_root(main_file)
+            source_files = _lp_collect_files(workspace_root, language=lang)
+            if not source_files:
+                source_files = _lp_collect_files(workspace_root)
     else:
         workspace_root = _validate_workspace_path(workspace_path)
-        python_files = _collect_workspace_python_files(workspace_root)
+        if MULTILANG_READY:
+            source_files = _lp_collect_files(workspace_root)
+        else:
+            source_files = _collect_workspace_python_files(workspace_root)
 
-    if not python_files:
-        raise HTTPException(status_code=404, detail="No Python files found in workspace.")
+    if not source_files:
+        raise HTTPException(status_code=404, detail="No source files found in workspace.")
 
-    return workspace_root, python_files
+    return workspace_root, source_files
 
 
 def _collect_syntax_errors(files: List[Path], workspace_root: Path) -> List[Dict[str, Any]]:
     syntax_errors: List[Dict[str, Any]] = []
 
     for file_path in sorted({path.resolve() for path in files}):
+        if file_path.suffix.lower() != ".py":
+            continue  # Python-only syntax checking; other languages skipped
         try:
             source = file_path.read_text(encoding="utf-8")
             ast.parse(source, filename=str(file_path))
@@ -506,7 +623,13 @@ def _collect_syntax_errors(files: List[Path], workspace_root: Path) -> List[Dict
 def _current_graph_files_for_validation(workspace_root: Path) -> List[Path]:
     if CURRENT_MAIN_FILE_PATH:
         main_file = _validate_main_file_path(CURRENT_MAIN_FILE_PATH)
-        return _collect_imported_python_files(main_file, workspace_root, strict=False)
+        if main_file.suffix.lower() == ".py":
+            return _collect_imported_python_files(main_file, workspace_root, strict=False)
+        if MULTILANG_READY:
+            lang = _lp_detect_language(main_file)
+            return _lp_collect_files(workspace_root, language=lang) if lang else []
+    if MULTILANG_READY:
+        return _lp_collect_files(workspace_root)
     return _collect_workspace_python_files(workspace_root)
 
 
@@ -591,16 +714,22 @@ def _assign_tree_positions(
     return next_cursor
 
 
-def _build_workspace_graph(workspace_path: str, main_file_path: Optional[str] = None) -> Dict[str, Any]:
-    workspace_root, python_files = _resolve_graph_context(workspace_path, main_file_path)
-    builtin_names: Set[str] = set(dir(builtins))
-
+def _parse_python_files(
+    source_files: List[Path],
+    workspace_root: Path,
+) -> Tuple[
+    Dict[str, Dict[str, Any]],
+    Dict[str, List[str]],
+    Dict[str, Dict[str, str]],
+    List[Dict[str, Any]],
+]:
+    """Python-specific AST-based parsing — returns same shape as parse_workspace_files."""
     functions: Dict[str, Dict[str, Any]] = {}
     name_index: Dict[str, List[str]] = {}
     file_function_index: Dict[str, Dict[str, str]] = {}
     endpoints: List[Dict[str, Any]] = []
 
-    for file_path in python_files:
+    for file_path in source_files:
         source = file_path.read_text(encoding="utf-8")
         source_lines = source.splitlines()
         tree = ast.parse(source, filename=str(file_path))
@@ -611,7 +740,6 @@ def _build_workspace_graph(workspace_path: str, main_file_path: Optional[str] = 
             for node in tree.body
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
         ]
-
         file_function_index.setdefault(rel_file, {})
 
         for node in function_nodes:
@@ -632,26 +760,52 @@ def _build_workspace_graph(workspace_path: str, main_file_path: Optional[str] = 
                 route_bindings.extend(_extract_route_bindings(decorator))
             if not route_bindings:
                 continue
-
             root_function_id = file_function_index[rel_file][node.name]
             for method, route_path in route_bindings:
                 endpoint_id = f"endpoint::{root_function_id}::{method}::{route_path}"
-                endpoints.append(
-                    {
-                        "id": endpoint_id,
-                        "root_function_id": root_function_id,
-                        "function_name": node.name,
-                        "method": method,
-                        "route_path": route_path,
-                        "file": rel_file,
-                        "code": _extract_source_segment(source_lines, node),
-                    }
-                )
+                endpoints.append({
+                    "id": endpoint_id,
+                    "root_function_id": root_function_id,
+                    "function_name": node.name,
+                    "method": method,
+                    "route_path": route_path,
+                    "file": rel_file,
+                    "code": _extract_source_segment(source_lines, node),
+                })
 
-    if not endpoints:
-        if main_file_path:
-            raise HTTPException(status_code=404, detail="No REST endpoints found in provided main file/import graph.")
-        raise HTTPException(status_code=404, detail="No REST endpoints found in workspace.")
+    return functions, name_index, file_function_index, endpoints
+
+
+def _build_workspace_graph(workspace_path: str, main_file_path: Optional[str] = None) -> Dict[str, Any]:
+    workspace_root, source_files = _resolve_graph_context(workspace_path, main_file_path)
+    builtin_names: Set[str] = set(dir(builtins))
+
+    # Detect dominant language in the collected files
+    first_lang = (
+        (_lp_detect_language(source_files[0]) if MULTILANG_READY else None)
+        if source_files else None
+    ) or "python"
+
+    if first_lang == "python" or not MULTILANG_READY:
+        functions, name_index, file_function_index, endpoints = _parse_python_files(
+            source_files, workspace_root
+        )
+        if not endpoints:
+            if main_file_path:
+                raise HTTPException(status_code=404, detail="No REST endpoints found in provided main file/import graph.")
+            raise HTTPException(status_code=404, detail="No REST endpoints found in workspace.")
+    else:
+        functions, name_index, file_function_index, endpoints = _lp_parse_workspace_files(
+            source_files, workspace_root
+        )
+        if not endpoints and functions:
+            endpoints = _lp_make_virtual_endpoints(functions)
+        if not endpoints:
+            lang_label = first_lang.capitalize()
+            raise HTTPException(
+                status_code=404,
+                detail=f"No functions or endpoints found in {lang_label} workspace.",
+            )
 
     function_calls: Dict[str, List[str]] = {}
     for function_id, function_meta in functions.items():
@@ -839,7 +993,7 @@ def _build_workspace_graph(workspace_path: str, main_file_path: Optional[str] = 
 
     return {
         "workspace_path": str(workspace_root),
-        "source_files": [_safe_relative(path, workspace_root) for path in python_files],
+        "source_files": [_safe_relative(path, workspace_root) for path in source_files],
         "nodes": nodes,
         "edges": edges,
     }
@@ -929,9 +1083,28 @@ async def set_workspace(payload: WorkspacePayload) -> Dict[str, Any]:
 async def load_main_file(payload: MainFilePayload) -> Dict[str, Any]:
     global CURRENT_WORKSPACE_PATH, CURRENT_MAIN_FILE_PATH, CURRENT_GRAPH_FILES
 
-    main_file = _validate_main_file_path(payload.path.strip())
-    CURRENT_MAIN_FILE_PATH = str(main_file.resolve())
-    CURRENT_WORKSPACE_PATH = str(main_file.parent.resolve())
+    raw_path = payload.path.strip()
+
+    if _is_github_url(raw_path):
+        workspace_root = _clone_github_repo(raw_path)
+        detected = _detect_main_python_file(workspace_root)
+        if detected is None:
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    "Cloned repository does not contain a recognisable Python entry point "
+                    "(main.py, app.py, server.py, …). "
+                    "Try providing a direct path to the file instead."
+                ),
+            )
+        CURRENT_WORKSPACE_PATH = str(workspace_root)
+        CURRENT_MAIN_FILE_PATH = str(detected.resolve())
+        source_label = raw_path
+    else:
+        main_file = _validate_main_file_path(raw_path)
+        CURRENT_MAIN_FILE_PATH = str(main_file.resolve())
+        CURRENT_WORKSPACE_PATH = str(main_file.parent.resolve())
+        source_label = CURRENT_MAIN_FILE_PATH
 
     graph_payload = _build_workspace_graph(
         workspace_path=CURRENT_WORKSPACE_PATH,
@@ -944,6 +1117,7 @@ async def load_main_file(payload: MainFilePayload) -> Dict[str, Any]:
         "message": "Main Python file loaded successfully.",
         "main_file_path": CURRENT_MAIN_FILE_PATH,
         "workspace_path": CURRENT_WORKSPACE_PATH,
+        "source_label": source_label,
         **graph_payload,
     }
 
@@ -1117,16 +1291,18 @@ async def save_function_content(payload: FunctionSavePayload) -> Dict[str, Any]:
 
 
 @app.post("/api/endpoint")
-async def drop_endpoint_intent(payload: EndpointPayload) -> Dict[str, Any]:
+async def create_endpoint(payload: EndpointPayload) -> Dict[str, Any]:
     if not CURRENT_WORKSPACE_PATH:
         raise HTTPException(
             status_code=400,
             detail="A workspace path must be connected first.",
         )
 
-    bob_dir = os.path.join(CURRENT_WORKSPACE_PATH, ".bob")
-    intent_file_path = os.path.join(bob_dir, "mcp_intent.json")
+    workspace_root = Path(CURRENT_WORKSPACE_PATH).resolve()
 
+    # Always write intent file so IBM Bob IDE can track the request.
+    bob_dir = workspace_root / ".bob"
+    intent_file_path = bob_dir / "mcp_intent.json"
     intent_payload = {
         "task": "Add a new REST API endpoint node",
         "method": payload.method,
@@ -1134,26 +1310,83 @@ async def drop_endpoint_intent(payload: EndpointPayload) -> Dict[str, Any]:
         "logic_intent": payload.description,
         "rule_reference": "Follow rules in .bob/rules-api-architect/01-generation-standards.md",
     }
-
     try:
-        os.makedirs(bob_dir, exist_ok=True)
-        with open(intent_file_path, "w", encoding="utf-8") as intent_file:
-            intent_file.write(json.dumps(intent_payload, indent=4))
+        bob_dir.mkdir(parents=True, exist_ok=True)
+        intent_file_path.write_text(json.dumps(intent_payload, indent=4), encoding="utf-8")
     except OSError as error:
         raise HTTPException(
             status_code=500,
             detail=f"Failed to write IBM Bob intent file: {error}",
         ) from error
-    except Exception as error:
+
+    # If the LangChain agent is available, generate the endpoint immediately.
+    if not LANGCHAIN_AGENT_READY or AutonomousWorkspaceAgent is None:
+        return {
+            "status": "intent_dropped",
+            "message": (
+                "Intent written to .bob/mcp_intent.json for IBM Bob. "
+                "LangChain agent is not available — ensure watsonx credentials are set and restart the backend."
+            ),
+            "intent_file": str(intent_file_path),
+        }
+
+    try:
+        runtime_config = _load_langchain_runtime_config()
+    except HTTPException:
+        return {
+            "status": "intent_dropped",
+            "message": (
+                "Intent written to .bob/mcp_intent.json for IBM Bob. "
+                "Watsonx credentials (WATSONX_API_KEY, WATSONX_PROJECT_ID) are not configured — "
+                "endpoint was not generated automatically."
+            ),
+            "intent_file": str(intent_file_path),
+        }
+
+    target_file = workspace_root / "backend" / "generated_endpoints.py"
+    target_rel = _safe_relative(target_file, workspace_root)
+
+    change_request = (
+        f"Implement endpoint {payload.method} {payload.path}.\n"
+        f"Business requirement: {payload.description}\n\n"
+        "Write the route handler directly into the target file. "
+        "Keep changes minimal and production-safe."
+    )
+
+    try:
+        agent = AutonomousWorkspaceAgent(
+            workspace_root=workspace_root,
+            model_id=LANGCHAIN_DEFAULT_MODEL_ID,
+            watsonx_url=runtime_config["watsonx_url"],
+            watsonx_project_id=runtime_config["watsonx_project_id"],
+            watsonx_api_key=runtime_config["watsonx_api_key"],
+            max_iterations=LANGCHAIN_DEFAULT_MAX_ITERATIONS,
+            verbose=False,
+        )
+        result = agent.run(target_file=target_rel, change_request=change_request)
+    except Exception as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"Unexpected filesystem error: {error}",
-        ) from error
+            detail=f"LangChain agent failed to create endpoint: {exc}",
+        ) from exc
+
+    modified = [item.get("path") for item in result.get("modified_files", []) if item.get("path")]
+
+    graph_payload: Dict[str, Any] = {}
+    try:
+        graph_payload = _build_workspace_graph(
+            workspace_path=CURRENT_WORKSPACE_PATH,
+            main_file_path=CURRENT_MAIN_FILE_PATH or None,
+        )
+    except HTTPException:
+        pass
 
     return {
         "status": "success",
-        "message": "Intent payload dropped into workspace for IBM Bob.",
-        "intent_file": intent_file_path,
+        "message": f"Endpoint {payload.method} {payload.path} generated by LangChain agent.",
+        "intent_file": str(intent_file_path),
+        "modified_files": modified,
+        **({"graph": graph_payload} if graph_payload else {}),
     }
 
 

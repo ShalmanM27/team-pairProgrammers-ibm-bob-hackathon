@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react';
 import { requestEndpointGeneration } from '../lib/apiClient';
 
+const HTTP_METHODS = {
+  GET:    { color: '#22c55e', soft: 'rgba(34,197,94,0.13)',  border: 'rgba(34,197,94,0.32)'  },
+  POST:   { color: '#0f62fe', soft: 'rgba(15,98,254,0.13)',  border: 'rgba(15,98,254,0.32)'  },
+  PUT:    { color: '#f59e0b', soft: 'rgba(245,158,11,0.13)', border: 'rgba(245,158,11,0.32)' },
+  DELETE: { color: '#ef4444', soft: 'rgba(239,68,68,0.13)',  border: 'rgba(239,68,68,0.32)'  },
+  PATCH:  { color: '#a855f7', soft: 'rgba(168,85,247,0.13)', border: 'rgba(168,85,247,0.32)' },
+};
+
 export default function AIGenerateEndpoint({ isOpen, onClose, onGenerated, defaultTargetFile, selectedModelId }) {
   const [method, setMethod] = useState('GET');
   const [path, setPath] = useState('/api/v1/');
@@ -10,22 +18,15 @@ export default function AIGenerateEndpoint({ isOpen, onClose, onGenerated, defau
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState(null);
 
-  const httpMethods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'];
-
   useEffect(() => {
     if (!isOpen) return;
     setTargetFile(defaultTargetFile || 'backend/main.py');
   }, [isOpen, defaultTargetFile]);
 
   const generateEndpoint = async () => {
-    if (!path.trim() || !description.trim()) {
-      alert('Please provide both path and description');
-      return;
-    }
-
+    if (!path.trim() || !description.trim()) return;
     setIsGenerating(true);
     setResult(null);
-
     try {
       const data = await requestEndpointGeneration({
         method,
@@ -36,252 +37,343 @@ export default function AIGenerateEndpoint({ isOpen, onClose, onGenerated, defau
         model_id: selectedModelId || undefined,
       });
       setResult(data);
-      
-      if (onGenerated) {
-        onGenerated(data);
-      }
+      if (onGenerated) onGenerated(data);
     } catch (error) {
-      setResult({
-        success: false,
-        explanation: `Error: ${error.message}. Make sure the unified backend is running on port 5000.`,
-      });
+      setResult({ success: false, explanation: `Error: ${error.message}. Make sure the backend is running on port 5000.` });
     } finally {
       setIsGenerating(false);
     }
   };
 
-  const copyToClipboard = () => {
-    if (result?.generated_code) {
-      navigator.clipboard.writeText(result.generated_code);
-      alert('Code copied to clipboard!');
-    }
-  };
-
-  const resetForm = () => {
-    setPath('/api/v1/');
-    setDescription('');
-    setResult(null);
-  };
+  const resetForm = () => { setPath('/api/v1/'); setDescription(''); setResult(null); };
 
   if (!isOpen) return null;
 
+  const ms = HTTP_METHODS[method];
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="flex h-[700px] w-[900px] flex-col rounded-lg bg-[#1a1d2b] shadow-2xl">
+    <div className="modal-overlay">
+      <div className="modal-panel" style={{ width: 900, height: 680, display: 'flex', flexDirection: 'column' }}>
+
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[#3a3a4a] p-4">
-          <div className="flex items-center gap-2">
-            <span className="text-2xl">✨</span>
+        <div style={{
+          padding: '15px 20px',
+          borderBottom: '1px solid var(--border-subtle)',
+          background: 'var(--bg-card)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexShrink: 0,
+          position: 'relative',
+          overflow: 'hidden',
+        }}>
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'linear-gradient(135deg, rgba(15,98,254,0.05) 0%, rgba(34,211,238,0.05) 100%)',
+            pointerEvents: 'none',
+          }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, position: 'relative' }}>
+            <div style={{
+              width: 42, height: 42, borderRadius: 14,
+              background: 'linear-gradient(135deg, #0f62fe 0%, #22d3ee 100%)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 22, boxShadow: 'var(--shadow-glow-cyan)', flexShrink: 0,
+            }}>
+              ✨
+            </div>
             <div>
-              <h2 className="text-lg font-semibold text-slate-100">AI Endpoint Generator</h2>
-              <p className="text-xs text-slate-400">Generate REST API endpoints from natural language</p>
+              <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0, lineHeight: 1.2 }}>
+                AI Endpoint Generator
+              </h2>
+              <p style={{ fontSize: 10, color: 'var(--text-muted)', margin: '2px 0 0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Natural language → REST API
+              </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-2 text-slate-400 hover:bg-[#2a2d3b] hover:text-slate-200"
+            style={{
+              width: 32, height: 32, borderRadius: 8,
+              background: 'var(--bg-elevated)', border: '1px solid var(--border-default)',
+              color: 'var(--text-secondary)', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14,
+              transition: 'all var(--transition-fast)', position: 'relative',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--accent-red-soft)'; e.currentTarget.style.color = 'var(--accent-red)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-elevated)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
           >
             ✕
           </button>
         </div>
 
-        {/* Content */}
-        <div className="flex flex-1 overflow-hidden">
-          {/* Left Panel - Input Form */}
-          <div className="w-1/2 overflow-y-auto border-r border-[#3a3a4a] p-6">
-            <div className="space-y-4">
-              {/* HTTP Method */}
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-300">
-                  HTTP Method
-                </label>
-                <div className="flex gap-2">
-                  {httpMethods.map((m) => (
+        {/* Body */}
+        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+
+          {/* Left panel — form */}
+          <div style={{
+            width: '44%',
+            padding: '18px 20px',
+            overflowY: 'auto',
+            borderRight: '1px solid var(--border-subtle)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 16,
+          }}>
+
+            {/* HTTP Method picker */}
+            <div>
+              <Label>HTTP Method</Label>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {Object.keys(HTTP_METHODS).map((m) => {
+                  const s = HTTP_METHODS[m];
+                  const active = method === m;
+                  return (
                     <button
                       key={m}
                       onClick={() => setMethod(m)}
-                      className={`rounded px-4 py-2 text-sm font-medium transition-colors ${
-                        method === m
-                          ? 'bg-[#0f62fe] text-white'
-                          : 'bg-[#2a2d3b] text-slate-300 hover:bg-[#3a3d4b]'
-                      }`}
+                      style={{
+                        padding: '5px 12px',
+                        borderRadius: 'var(--radius-sm)',
+                        border: '1px solid',
+                        borderColor: active ? s.color : s.border,
+                        background: active ? s.color : s.soft,
+                        color: active ? '#ffffff' : s.color,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        transition: 'all var(--transition-fast)',
+                        transform: active ? 'scale(1.06)' : 'scale(1)',
+                        boxShadow: active ? `0 4px 12px ${s.border}` : 'none',
+                        letterSpacing: '0.03em',
+                      }}
                     >
                       {m}
                     </button>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
+            </div>
 
-              {/* Endpoint Path */}
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-300">
-                  Endpoint Path
-                </label>
+            {/* Path */}
+            <div>
+              <Label>Endpoint Path</Label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                <span style={{
+                  padding: '0 9px', height: 36, lineHeight: '36px',
+                  background: ms.soft, color: ms.color,
+                  border: `1px solid ${ms.border}`,
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: 11, fontWeight: 700, flexShrink: 0,
+                  letterSpacing: '0.03em',
+                }}>
+                  {method}
+                </span>
                 <input
                   type="text"
                   value={path}
                   onChange={(e) => setPath(e.target.value)}
                   placeholder="/api/v1/users"
-                  className="w-full rounded-lg border border-[#3a3a4a] bg-[#2a2d3b] p-3 text-sm text-slate-100 placeholder-slate-500 focus:border-[#0f62fe] focus:outline-none"
+                  className="input-base"
+                  style={{ flex: 1 }}
                 />
               </div>
-
-              {/* Description */}
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-300">
-                  Description (Natural Language)
-                </label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Describe what this endpoint should do... For example: 'Fetch all active users with pagination support. Include user profile data and last login timestamp. Return 404 if no users found.'"
-                  className="w-full resize-none rounded-lg border border-[#3a3a4a] bg-[#2a2d3b] p-3 text-sm text-slate-100 placeholder-slate-500 focus:border-[#0f62fe] focus:outline-none"
-                  rows={6}
-                />
-                <p className="mt-1 text-xs text-slate-500">
-                  Be specific about inputs, outputs, error cases, and business logic
-                </p>
-              </div>
-
-              {/* Target File */}
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-300">
-                  Target File
-                </label>
-                <input
-                  type="text"
-                  value={targetFile}
-                  onChange={(e) => setTargetFile(e.target.value)}
-                  placeholder="backend/main.py"
-                  className="w-full rounded-lg border border-[#3a3a4a] bg-[#2a2d3b] p-3 text-sm text-slate-100 placeholder-slate-500 focus:border-[#0f62fe] focus:outline-none"
-                />
-              </div>
-
-              {/* Options */}
-              <div>
-                <label className="flex items-center gap-2 text-sm text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={includeTests}
-                    onChange={(e) => setIncludeTests(e.target.checked)}
-                    className="h-4 w-4 rounded border-[#3a3a4a] bg-[#2a2d3b] text-[#0f62fe] focus:ring-[#0f62fe]"
-                  />
-                  Generate unit tests
-                </label>
-              </div>
-
-              {/* Generate Button */}
-              <button
-                onClick={generateEndpoint}
-                disabled={isGenerating || !path.trim() || !description.trim()}
-                className="w-full rounded-lg bg-[#0f62fe] py-3 text-sm font-medium text-white hover:bg-[#0353e9] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {isGenerating ? 'Generating...' : '✨ Generate Endpoint'}
-              </button>
             </div>
+
+            {/* Description */}
+            <div>
+              <Label>Description (Natural Language)</Label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Describe what this endpoint should do — inputs, outputs, validation, error cases, business logic…"
+                rows={6}
+                style={{
+                  width: '100%', resize: 'none',
+                  background: 'var(--bg-input)', color: 'var(--text-primary)',
+                  border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)',
+                  padding: '10px 12px', fontSize: 13, lineHeight: 1.55, outline: 'none',
+                  fontFamily: 'inherit', transition: 'border-color var(--transition-fast)',
+                }}
+                onFocus={(e) => e.target.style.borderColor = 'var(--accent-blue)'}
+                onBlur={(e) => e.target.style.borderColor = 'var(--border-default)'}
+              />
+              <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>
+                Be specific about inputs, outputs, and error cases.
+              </p>
+            </div>
+
+            {/* Target file */}
+            <div>
+              <Label>Target File</Label>
+              <input
+                type="text"
+                value={targetFile}
+                onChange={(e) => setTargetFile(e.target.value)}
+                placeholder="backend/main.py"
+                className="input-base"
+                style={{ width: '100%' }}
+              />
+            </div>
+
+            {/* Options */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={includeTests}
+                onChange={(e) => setIncludeTests(e.target.checked)}
+                style={{ width: 14, height: 14, cursor: 'pointer', accentColor: 'var(--accent-blue)' }}
+              />
+              <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Generate unit tests</span>
+            </label>
+
+            {/* Generate button */}
+            <button
+              onClick={generateEndpoint}
+              disabled={isGenerating || !path.trim() || !description.trim()}
+              className="btn-primary"
+              style={{
+                width: '100%', height: 42, fontSize: 13,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+              }}
+            >
+              {isGenerating
+                ? <><span className="animate-spin" style={{ fontSize: 14 }}>⟳</span> Generating…</>
+                : <><span>✨</span> Generate Endpoint</>
+              }
+            </button>
           </div>
 
-          {/* Right Panel - Generated Code */}
-          <div className="flex w-1/2 flex-col overflow-hidden">
+          {/* Right panel — result */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             {result ? (
-              <>
-                <div className="border-b border-[#3a3a4a] p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-medium text-slate-100">
-                        {result.success ? '✅ Generated Successfully' : '❌ Generation Failed'}
-                      </h3>
-                      <p className="text-xs text-slate-400">{result.file_path}</p>
-                    </div>
-                    {result.success && (
-                      <button
-                        onClick={copyToClipboard}
-                        className="rounded bg-[#2a2d3b] px-3 py-1 text-xs text-slate-300 hover:bg-[#3a3d4b]"
-                      >
-                        📋 Copy
-                      </button>
+              <div className="animate-fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+                {/* Result header */}
+                <div style={{
+                  padding: '11px 18px',
+                  borderBottom: '1px solid var(--border-subtle)',
+                  background: result.success ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.06)',
+                  flexShrink: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}>
+                  <div>
+                    <h3 style={{
+                      fontSize: 13, fontWeight: 700, margin: 0,
+                      color: result.success ? '#22c55e' : '#ef4444',
+                    }}>
+                      {result.success ? '✅ Generated Successfully' : '❌ Generation Failed'}
+                    </h3>
+                    {result.file_path && (
+                      <p style={{ fontSize: 10, color: 'var(--text-muted)', margin: '2px 0 0', fontFamily: 'monospace' }}>
+                        {result.file_path}
+                      </p>
                     )}
                   </div>
+                  {result.success && (
+                    <button
+                      onClick={() => navigator.clipboard.writeText(result.generated_code || '')}
+                      className="btn-ghost"
+                      style={{ height: 28, fontSize: 11 }}
+                    >
+                      📋 Copy
+                    </button>
+                  )}
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4">
-                  {/* Explanation */}
+                <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }}>
                   {result.explanation && (
-                    <div className="mb-4 rounded-lg bg-[#2a2d3b] p-3">
-                      <p className="text-sm text-slate-300">{result.explanation}</p>
+                    <div style={{
+                      marginBottom: 14,
+                      padding: '10px 14px',
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 'var(--radius-md)',
+                    }}>
+                      <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
+                        {result.explanation}
+                      </p>
                     </div>
                   )}
 
-                  {/* Generated Code */}
                   {result.generated_code && (
-                    <div className="mb-4">
-                      <div className="mb-2 text-xs font-medium text-slate-400">Generated Code:</div>
-                      <pre className="overflow-x-auto rounded-lg bg-[#161616] p-4 text-xs text-slate-100">
-                        <code>{result.generated_code}</code>
-                      </pre>
+                    <div style={{ marginBottom: 14 }}>
+                      <SectionLabel>Generated Code</SectionLabel>
+                      <div className="code-block" style={{ maxHeight: 260, overflowY: 'auto' }}>
+                        <pre style={{ margin: 0 }}><code>{result.generated_code}</code></pre>
+                      </div>
                     </div>
                   )}
 
-                  {/* Suggestions */}
                   {result.suggestions?.length > 0 && (
-                    <div className="mb-4">
-                      <div className="mb-2 text-xs font-medium text-slate-400">💡 Suggestions:</div>
-                      <ul className="space-y-1">
-                        {result.suggestions.map((suggestion, i) => (
-                          <li key={i} className="text-xs text-slate-300">
-                            • {suggestion}
-                          </li>
-                        ))}
-                      </ul>
+                    <div style={{ marginBottom: 14 }}>
+                      <SectionLabel color="var(--accent-cyan)">💡 Suggestions</SectionLabel>
+                      {result.suggestions.map((s, i) => (
+                        <p key={i} style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '3px 0' }}>• {s}</p>
+                      ))}
                     </div>
                   )}
 
-                  {/* Warnings */}
                   {result.warnings?.length > 0 && (
-                    <div>
-                      <div className="mb-2 text-xs font-medium text-yellow-400">⚠️ Warnings:</div>
-                      <ul className="space-y-1">
-                        {result.warnings.map((warning, i) => (
-                          <li key={i} className="text-xs text-yellow-300">
-                            • {warning}
-                          </li>
-                        ))}
-                      </ul>
+                    <div style={{ marginBottom: 14 }}>
+                      <SectionLabel color="var(--accent-amber)">⚠ Warnings</SectionLabel>
+                      {result.warnings.map((w, i) => (
+                        <p key={i} style={{ fontSize: 12, color: '#fbbf24', margin: '3px 0' }}>• {w}</p>
+                      ))}
                     </div>
                   )}
 
-                  {/* Action Buttons */}
                   {result.success && (
-                    <div className="mt-4 flex gap-2">
-                      <button
-                        onClick={resetForm}
-                        className="rounded bg-[#2a2d3b] px-4 py-2 text-sm text-slate-300 hover:bg-[#3a3d4b]"
-                      >
+                    <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+                      <button onClick={resetForm} className="btn-ghost" style={{ height: 36, fontSize: 12 }}>
                         Generate Another
                       </button>
-                      <button
-                        onClick={onClose}
-                        className="rounded bg-[#0f62fe] px-4 py-2 text-sm text-white hover:bg-[#0353e9]"
-                      >
+                      <button onClick={onClose} className="btn-primary" style={{ height: 36, fontSize: 12 }}>
                         Done
                       </button>
                     </div>
                   )}
                 </div>
-              </>
+              </div>
             ) : (
-              <div className="flex flex-1 items-center justify-center p-8 text-center">
-                <div>
-                  <div className="mb-4 text-6xl">🎯</div>
-                  <p className="text-sm text-slate-400">
-                    Fill in the form and click Generate to create your endpoint
-                  </p>
-                </div>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, textAlign: 'center' }}>
+                <div className="animate-float" style={{ fontSize: 58, marginBottom: 18 }}>🎯</div>
+                <p style={{ fontSize: 14, color: 'var(--text-secondary)', fontWeight: 600, margin: '0 0 6px' }}>
+                  Ready to Generate
+                </p>
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.65 }}>
+                  Fill in the form and click<br />
+                  <strong style={{ color: 'var(--accent-blue)' }}>Generate Endpoint</strong> to create your API
+                </p>
               </div>
             )}
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function Label({ children }) {
+  return (
+    <div style={{
+      fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)',
+      textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 7,
+    }}>
+      {children}
+    </div>
+  );
+}
+
+function SectionLabel({ children, color }) {
+  return (
+    <div style={{
+      fontSize: 10, fontWeight: 700, color: color || 'var(--text-muted)',
+      textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 7,
+    }}>
+      {children}
     </div>
   );
 }

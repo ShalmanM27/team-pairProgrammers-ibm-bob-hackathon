@@ -1420,9 +1420,14 @@ async def refactor_function(
             
             logger.info(f"✅ Refactored function using IBM Granite model")
         else:
-            _log_watsonx_fallback_reason_once()
-            refactored_code = function_source
-            logger.warning("⚠️  Using fallback refactoring (watsonx not available)")
+            missing = _missing_watsonx_env_vars()
+            detail = (
+                f"Refactoring requires watsonx credentials. "
+                f"Missing environment variables: {', '.join(missing)}"
+                if missing
+                else "Refactoring requires watsonx credentials (integration unavailable)."
+            )
+            raise HTTPException(status_code=503, detail=detail)
         
         return AIGenerationResponse(
             success=True,
@@ -1469,13 +1474,14 @@ async def chat_completion(request: ChatCompletionRequest) -> ChatCompletionRespo
             )
             logger.info("Generated chat response using model: %s", selected_model_id)
         else:
-            _log_watsonx_fallback_reason_once()
-            response_text = (
-                "I'm your Api-Architect assistant (running in fallback mode). "
-                f"You asked: '{request.message}'. watsonx.ai integration is not available - "
-                "please configure WATSONX_API_KEY and WATSONX_PROJECT_ID environment variables."
+            missing = _missing_watsonx_env_vars()
+            detail = (
+                f"Chat requires watsonx credentials. "
+                f"Missing environment variables: {', '.join(missing)}"
+                if missing
+                else "Chat requires watsonx credentials (integration unavailable)."
             )
-            logger.warning("Using fallback chat response (watsonx not available)")
+            raise HTTPException(status_code=503, detail=detail)
 
         return ChatCompletionResponse(
             message=response_text,

@@ -12,23 +12,26 @@ modes:
     # Role definition and behavior
     role: |
       You are Api-Architect, a specialized backend system engineer with deep expertise in:
-      - FastAPI and Python backend development
-      - REST API design patterns and best practices
+      - Multi-language backend development (Python/FastAPI, Node.js/Express, Java/Spring, Go, and more)
+      - REST API design patterns and best practices across all major languages
       - Code generation from natural language descriptions
       - Function refactoring and optimization
       - Architectural decision-making for scalable systems
-      
-      You receive requests from a visual frontend canvas via MCP (Model Context Protocol) 
-      and translate them into concrete backend implementations. You understand the existing 
-      codebase structure and maintain consistency with established patterns.
-      
+      - Visual API graph analysis via the Canvas Bridge frontend
+
+      You receive requests from a visual frontend canvas via MCP (Model Context Protocol)
+      and translate them into concrete backend implementations. The canvas can load and
+      visualise codebases in Python, JavaScript/TypeScript, Java, Go, Ruby, PHP, C#, Rust,
+      Kotlin, Swift, and more — from local paths or any public GitHub repository URL.
+      You understand the existing codebase structure and maintain consistency with established patterns.
+
       When generating or modifying code:
-      1. Follow the project's existing patterns and conventions
-      2. Ensure type safety and proper error handling
+      1. Detect the target language and follow its idiomatic conventions
+      2. Ensure type safety and proper error handling for that language
       3. Write clean, maintainable, and well-documented code
       4. Consider performance and scalability implications
       5. Validate all inputs and handle edge cases
-      
+
       You work iteratively, confirming each change before proceeding to the next step.
     
     # Tool access configuration
@@ -57,15 +60,15 @@ modes:
         description: Communicate with MCP servers for frontend-backend bridge
         servers:
           - name: api-architect-bridge
-            command: python
+            command: python3
             args:
               - -m
               - uvicorn
-              - backend.mcp_server:app
+              - backend.main:app
               - --host
               - 127.0.0.1
               - --port
-              - 5001
+              - 5000
             env:
               PYTHONPATH: "${workspaceFolder}"
               MCP_MODE: "api-architect"
@@ -75,6 +78,7 @@ modes:
       # File access restrictions
       allowed_paths:
         - backend/**
+        - frontend/src/**
         - testing/**
         - .bob/rules-api-architect/**
       
@@ -96,21 +100,33 @@ modes:
       rules_directory: .bob/rules-api-architect
       reference_files:
         - backend/main.py
+        - backend/language_parsers.py
         - testing/sample_api.py
-      
+
       # Key patterns to follow
       patterns:
-        - name: FastAPI Endpoint Structure
+        - name: Multi-Language Support
+          description: |
+            The canvas supports Python, JS/TS, Java, Go, Ruby, PHP, C#, Rust, Kotlin, Swift.
+            Local paths and GitHub repo URLs are both accepted as input.
+
+        - name: FastAPI Endpoint Structure (Python)
           description: Use FastAPI decorators, proper HTTP methods, Pydantic models
-        
+
+        - name: Express Route Structure (JS/TS)
+          description: Use app.get/post/put/delete with route path and handler function
+
+        - name: Spring MVC (Java)
+          description: Use @GetMapping, @PostMapping, @RestController annotations
+
         - name: Service Layer Pattern
           description: Separate business logic into service modules
-        
+
         - name: Error Handling
-          description: Use HTTPException with appropriate status codes
-        
+          description: Use language-appropriate error handling (HTTPException for Python, try/catch for JS, etc.)
+
         - name: Type Annotations
-          description: Always include type hints for function parameters and returns
+          description: Always include type hints/annotations for function parameters and returns
     
     # Startup behavior
     on_activate:
@@ -148,12 +164,15 @@ modes:
       
       frontend_bridge:
         enabled: true
-        port: 5001
+        port: 5000
         endpoints:
           - /mcp/generate-endpoint
           - /mcp/refactor-function
-          - /mcp/analyze-code
           - /mcp/chat-completion
+          - /mcp/models
+          - /mcp/health
+          - /api/load-main-file
+          - /api/workspace-graph
     
     # Validation rules
     validation:
@@ -177,9 +196,14 @@ modes:
     tags:
       - backend
       - api
+      - multi-language
       - fastapi
-      - python
+      - express
+      - spring
+      - go
       - architecture
       - mcp
+      - ibm-granite
+      - watsonx
 
 # Made with Bob
