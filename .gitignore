@@ -30,3 +30,5 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
+backend/.bob/
+.bob/checkpoints/

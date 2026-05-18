@@ -1,0 +1,4 @@
+# SPA fallback. Files in /public are copied verbatim into the build output
+# (frontend/dist/_redirects), where Netlify picks them up automatically.
+# Duplicate of the rule in netlify.toml as a belt-and-braces guarantee.
+/*  /index.html  200

@@ -1,0 +1,18 @@
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual envs
+venv/
+.venv/
+env/
+
+# Local secrets - never commit
+.env
+.env.*
+!.env.example
+
+# Editor
+.idea/
+.vscode/

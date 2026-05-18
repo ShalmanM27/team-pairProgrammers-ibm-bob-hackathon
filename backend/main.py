@@ -13,19 +13,73 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from dotenv import load_dotenv
+load_dotenv()
 
-
-app = FastAPI(title="IBM Bob API Architect Canvas Bridge")
+app = FastAPI(title="Bobcat Backend")
 logger = logging.getLogger(__name__)
 
-# Allow local frontend apps to call this bridge server from any origin.
+# CORS is env-driven so production deploys (Railway, etc.) can narrow it.
+# ALLOWED_ORIGINS = comma-separated list, or "*" for wildcard (safe default
+# for local dev + initial demo deploys before the frontend URL is known).
+#
+# IMPORTANT: allow_credentials MUST be False when origins are the wildcard,
+# because browsers reject any credentialed response that uses Access-Control-
+# Allow-Origin: * paired with Access-Control-Allow-Credentials: true. We
+# auto-disable credentials in wildcard mode so the combo never causes a
+# silent CORS rejection in the browser.
+_allowed_origins_raw = os.getenv("ALLOWED_ORIGINS", "*").strip()
+if _allowed_origins_raw == "*":
+    _origins = ["*"]
+    _allow_credentials = False
+else:
+    _origins = [o.strip() for o in _allowed_origins_raw.split(",") if o.strip()]
+    _allow_credentials = True
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_origins,
+    allow_credentials=_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
 )
+
+
+# Belt-and-braces safety net. Starlette's CORSMiddleware adds headers to
+# responses produced by route handlers, but a route that raises an uncaught
+# Exception short-circuits to Starlette's plain-text 500 page which has NO
+# CORS headers. The browser then mislabels the real server error as a CORS
+# violation. This handler ensures EVERY response - including unhandled
+# crashes - gets the same headers the CORSMiddleware would have added, AND
+# carries the actual exception class/message so the frontend can show a
+# real error instead of "Network Error".
+from fastapi.responses import JSONResponse  # noqa: E402
+
+def _cors_headers_for(request) -> Dict[str, str]:
+    origin = request.headers.get("origin", "")
+    if _origins == ["*"]:
+        return {"Access-Control-Allow-Origin": "*"}
+    if origin and origin in _origins:
+        return {
+            "Access-Control-Allow-Origin": origin,
+            "Vary": "Origin",
+            "Access-Control-Allow-Credentials": "true",
+        }
+    return {}
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request, exc):  # noqa: ARG001
+    logger.exception("Unhandled exception in %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": f"Server error: {type(exc).__name__}: {exc}",
+            "path":   request.url.path,
+        },
+        headers=_cors_headers_for(request),
+    )
 
 MCP_ROUTES_ATTACHED = False
 LANGCHAIN_AGENT_READY = False
@@ -85,6 +139,9 @@ try:
             parse_workspace_files as _lp_parse_workspace_files,
             make_virtual_endpoints as _lp_make_virtual_endpoints,
             EXCLUDED_DIR_NAMES as _LP_EXCLUDED,
+            infer_group as _lp_infer_group,
+            is_sensitive as _lp_is_sensitive,
+            compute_risk_score as _lp_compute_risk_score,
         )
     except ModuleNotFoundError:
         from backend.language_parsers import (
@@ -95,12 +152,35 @@ try:
             parse_workspace_files as _lp_parse_workspace_files,
             make_virtual_endpoints as _lp_make_virtual_endpoints,
             EXCLUDED_DIR_NAMES as _LP_EXCLUDED,
+            infer_group as _lp_infer_group,
+            is_sensitive as _lp_is_sensitive,
+            compute_risk_score as _lp_compute_risk_score,
         )
     MULTILANG_READY = True
 except Exception as _lp_exc:  # noqa: BLE001
     logger.warning("language_parsers not available — Python-only mode: %s", _lp_exc)
     MULTILANG_READY = False
     _LP_EXCLUDED: Set[str] = set()
+    import re as _re
+    def _lp_infer_group(name: str, file_path: str) -> str:  # type: ignore[misc]
+        s = (name + " " + file_path).lower()
+        for pat, grp in [("auth|login|token|session|password|jwt|oauth", "auth"),
+                         ("payment|invoice|billing|charge|wallet|stripe", "payments"),
+                         ("notif|email|sms|alert|webhook|push|message", "notifications"),
+                         ("analytic|track|metric|report|dashboard|stat", "analytics"),
+                         ("db|database|repository|model|schema|query|cache", "database"),
+                         ("controller|router|route|handler|endpoint|middleware", "api"),
+                         ("profile|avatar|account|member", "profile"),
+                         ("comment|feed|like|reply|thread|article|content", "content"),
+                         ("flag|moderat|ban|spam|abuse", "moderation"),
+                         ("learn|course|lesson|quiz|enroll|progress", "learning")]:
+            if _re.search(pat, s, _re.I):
+                return grp
+        return "utils"
+    def _lp_is_sensitive(name: str) -> bool:  # type: ignore[misc]
+        return bool(_re.search(r"auth|login|token|password|payment|secret|encrypt|session", name, _re.I))
+    def _lp_compute_risk_score(fan_in: int, fan_out: int, sensitive: bool) -> float:  # type: ignore[misc]
+        return round(min(1.0, min(1.0, (fan_in * 0.6 + fan_out * 0.4) / 15.0) + (0.35 if sensitive else 0.0)), 3)
 
 EXCLUDED_PARTS = {".venv", "__pycache__", "node_modules", ".bob", ".git",
                   "dist", "build", ".next", "out", "target", "vendor",
@@ -137,6 +217,17 @@ class FileSavePayload(BaseModel):
 class FunctionSavePayload(BaseModel):
     function_id: str
     content: str
+
+
+class FunctionDeletePayload(BaseModel):
+    function_id: str
+
+
+class RouterCreatePayload(BaseModel):
+    relative_path: str
+    router_name: Optional[str] = None
+    prefix: Optional[str] = ""
+    tag: Optional[str] = None
 
 
 class AgentExecutionPayload(BaseModel):
@@ -184,11 +275,28 @@ def _validate_workspace_path(path_value: str) -> Path:
 
 
 def _validate_main_file_path(path_value: str) -> Path:
-    main_file = Path(path_value).resolve()
+    raw = (path_value or "").strip()
+    if not raw:
+        raise HTTPException(status_code=400, detail="No path provided.")
+    main_file = Path(raw).expanduser().resolve()
     if not main_file.exists():
-        raise HTTPException(status_code=400, detail="File path does not exist!")
+        raise HTTPException(
+            status_code=400,
+            detail=f"File path does not exist: {main_file}",
+        )
+    if main_file.is_dir():
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Path is a directory, not a file: {main_file}. "
+                "Point at the project's main Python file (e.g. backend/app/main.py)."
+            ),
+        )
     if not main_file.is_file():
-        raise HTTPException(status_code=400, detail="Provided path is not a file!")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Path is not a regular file: {main_file}",
+        )
     return main_file
 
 
@@ -201,7 +309,13 @@ def _clone_github_repo(url: str) -> Path:
     global _TEMP_CLONE_DIR
     if _TEMP_CLONE_DIR and Path(_TEMP_CLONE_DIR).exists():
         shutil.rmtree(_TEMP_CLONE_DIR, ignore_errors=True)
-    temp_dir = tempfile.mkdtemp(prefix="ibmbob_clone_")
+    try:
+        temp_dir = tempfile.mkdtemp(prefix="ibmbob_clone_")
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not create temp directory for clone: {exc}",
+        ) from exc
     _TEMP_CLONE_DIR = temp_dir
     try:
         subprocess.run(
@@ -211,14 +325,34 @@ def _clone_github_repo(url: str) -> Path:
             text=True,
             timeout=120,
         )
+    except FileNotFoundError as exc:
+        # The git binary itself is missing on the container. Common on slim
+        # Python images. Raise a proper HTTPException so CORS headers stick.
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        _TEMP_CLONE_DIR = None
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "git binary is not available on the server. "
+                "Add 'git' to the container image (e.g. nixpacks.toml apt_pkgs)."
+            ),
+        ) from exc
     except subprocess.CalledProcessError as exc:
         shutil.rmtree(temp_dir, ignore_errors=True)
         _TEMP_CLONE_DIR = None
-        raise HTTPException(status_code=400, detail=f"Git clone failed: {exc.stderr.strip()}") from exc
+        stderr = (exc.stderr or "").strip() or "no stderr captured"
+        raise HTTPException(status_code=400, detail=f"Git clone failed: {stderr}") from exc
     except subprocess.TimeoutExpired:
         shutil.rmtree(temp_dir, ignore_errors=True)
         _TEMP_CLONE_DIR = None
         raise HTTPException(status_code=408, detail="Git clone timed out after 120 seconds.")
+    except Exception as exc:  # noqa: BLE001 - belt-and-braces for unexpected runtime errors
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        _TEMP_CLONE_DIR = None
+        raise HTTPException(
+            status_code=500,
+            detail=f"Unexpected error during git clone: {type(exc).__name__}: {exc}",
+        ) from exc
     return Path(temp_dir)
 
 
@@ -723,7 +857,7 @@ def _parse_python_files(
     Dict[str, Dict[str, str]],
     List[Dict[str, Any]],
 ]:
-    """Python-specific AST-based parsing — returns same shape as parse_workspace_files."""
+    # Python-specific AST-based parsing — returns same shape as parse_workspace_files.
     functions: Dict[str, Dict[str, Any]] = {}
     name_index: Dict[str, List[str]] = {}
     file_function_index: Dict[str, Dict[str, str]] = {}
@@ -776,11 +910,13 @@ def _parse_python_files(
     return functions, name_index, file_function_index, endpoints
 
 
-def _build_workspace_graph(workspace_path: str, main_file_path: Optional[str] = None) -> Dict[str, Any]:
+def _build_workspace_graph(workspace_path: str, main_file_path: Optional[str] = None) -> Dict[str, Any]:  # noqa: C901
+    from collections import defaultdict
+
     workspace_root, source_files = _resolve_graph_context(workspace_path, main_file_path)
     builtin_names: Set[str] = set(dir(builtins))
 
-    # Detect dominant language in the collected files
+    # ── Parse source files ────────────────────────────────────────────────────
     first_lang = (
         (_lp_detect_language(source_files[0]) if MULTILANG_READY else None)
         if source_files else None
@@ -801,199 +937,180 @@ def _build_workspace_graph(workspace_path: str, main_file_path: Optional[str] = 
         if not endpoints and functions:
             endpoints = _lp_make_virtual_endpoints(functions)
         if not endpoints:
-            lang_label = first_lang.capitalize()
             raise HTTPException(
                 status_code=404,
-                detail=f"No functions or endpoints found in {lang_label} workspace.",
+                detail=f"No functions or endpoints found in {first_lang.capitalize()} workspace.",
             )
 
+    # ── Resolve call graph (direct_calls → function IDs) ─────────────────────
     function_calls: Dict[str, List[str]] = {}
-    for function_id, function_meta in functions.items():
-        filtered_calls: List[str] = []
-        seen_targets: Set[str] = set()
-        caller_file = function_meta["file"]
-
-        for called_name in function_meta["direct_calls"]:
+    for fn_id, fn_meta in functions.items():
+        seen: Set[str] = set()
+        resolved: List[str] = []
+        for called_name in fn_meta.get("direct_calls", []):
             if called_name in builtin_names:
                 continue
+            target: Optional[str] = file_function_index.get(fn_meta["file"], {}).get(called_name)
+            if not target:
+                global_m = name_index.get(called_name, [])
+                if len(global_m) == 1:
+                    target = global_m[0]
+            if target and target != fn_id and target not in seen:
+                seen.add(target)
+                resolved.append(target)
+        function_calls[fn_id] = resolved
 
-            target_id: Optional[str] = None
-            same_file_match = file_function_index.get(caller_file, {}).get(called_name)
-            if same_file_match:
-                target_id = same_file_match
-            else:
-                global_matches = name_index.get(called_name, [])
-                if len(global_matches) == 1:
-                    target_id = global_matches[0]
+    # ── IBM-BOB: fan-in / fan-out / risk / group / state ─────────────────────
+    fan_out: Dict[str, int] = {fid: len(calls) for fid, calls in function_calls.items()}
+    fan_in:  Dict[str, int] = {}
+    for calls in function_calls.values():
+        for tid in calls:
+            fan_in[tid] = fan_in.get(tid, 0) + 1
 
-            if not target_id:
+    for fn_id, fn_meta in functions.items():
+        fi = fan_in.get(fn_id, 0)
+        fo = fan_out.get(fn_id, 0)
+        sensitive = _lp_is_sensitive(fn_meta["name"] + " " + fn_meta["file"])
+        risk = _lp_compute_risk_score(fi, fo, sensitive)
+        fn_meta.setdefault("group", _lp_infer_group(fn_meta["name"], fn_meta["file"]))
+        fn_meta.update({"risk": risk, "fan_in": fi, "fan_out": fo,
+                        "state": "risky" if risk > 0.25 else "calm"})
+
+    # ── IBM-BOB: layered layout (BFS depth from endpoint roots) ──────────────
+    GROUP_ORDER = ["api", "auth", "payments", "database", "notifications",
+                   "analytics", "profile", "content", "moderation",
+                   "governance", "learning", "utils"]
+
+    layers: Dict[str, int] = {}
+    for ep in endpoints:
+        root = ep["root_function_id"]
+        queue: List[tuple] = [(root, 0)]
+        while queue:
+            fid, depth = queue.pop(0)
+            if fid not in functions:
                 continue
-            if target_id == function_id:
+            if fid in layers and layers[fid] <= depth:
                 continue
-            if target_id in seen_targets:
-                continue
+            layers[fid] = depth
+            for called in function_calls.get(fid, []):
+                if called not in layers or layers[called] > depth + 1:
+                    queue.append((called, depth + 1))
 
-            seen_targets.add(target_id)
-            filtered_calls.append(target_id)
+    max_layer = max(layers.values(), default=0)
 
-        function_calls[function_id] = filtered_calls
+    # Which functions to show: reachable from endpoints + those that call reachable ones
+    reachable: Set[str] = set(layers.keys())
+    also_callers = {fid for fid, calls in function_calls.items()
+                    if any(c in reachable for c in calls)}
+    visible_fns: Set[str] = reachable | also_callers
+    if not visible_fns:
+        visible_fns = set(functions.keys())
 
+    # Force every endpoint's direct handler into visible_fns so input nodes are never detached.
+    # The BFS misses handlers whose functions couldn't be resolved (e.g. cross-file refs).
+    for ep in endpoints:
+        root = ep["root_function_id"]
+        if root in functions and root not in visible_fns:
+            visible_fns.add(root)
+            layers[root] = 1  # Place immediately after inputs (layer 1)
+
+    for fid in visible_fns:
+        layers.setdefault(fid, max_layer + 1)
+
+    # Sort visible functions into (layer, group) buckets
+    layer_grp: Dict[int, Dict[str, List[str]]] = defaultdict(lambda: defaultdict(list))
+    for fid in visible_fns:
+        layer_grp[layers[fid]][functions[fid]["group"]].append(fid)
+
+    # Assign x/y positions
+    INPUT_X     = 60.0
+    FN_X_START  = 360.0
+    LAYER_X_STEP = 300.0
+    NODE_H      = 115.0
+    GROUP_GAP   = 30.0
+    START_Y     = 80.0
+
+    fn_positions: Dict[str, Dict[str, float]] = {}
+    for layer_num in sorted(layer_grp.keys()):
+        x = FN_X_START + layer_num * LAYER_X_STEP
+        y = START_Y
+        for grp in GROUP_ORDER:
+            grp_fns = sorted(layer_grp[layer_num].get(grp, []))
+            for fid in grp_fns:
+                fn_positions[fid] = {"x": float(x), "y": float(y)}
+                y += NODE_H
+            if grp_fns:
+                y += GROUP_GAP
+
+    # ── Build nodes & edges ───────────────────────────────────────────────────
     nodes: List[Dict[str, Any]] = []
     edges: List[Dict[str, Any]] = []
+    added_edge_ids: Set[str] = set()
 
-    start_x = 70
-    step_x = 260
-    row_gap_y = 110
-    endpoint_gap_y = 150
-    top_cursor_y = 90.0
+    # Input nodes — one per API endpoint (left column)
+    ep_y = START_Y
+    for ep in endpoints:
+        input_id = f'input::{ep["id"]}'
+        nodes.append({
+            "id": input_id,
+            "type": "default",
+            "position": {"x": INPUT_X, "y": ep_y},
+            "data": {
+                "label": f'{ep["method"]} {ep["route_path"]}',
+                "kind": "input",
+                "title": f'{ep["method"]} {ep["route_path"]}',
+                "file": ep["file"],
+                "code": ep.get("code", ""),
+                "group": "api",
+                "risk": 0.0, "fan_in": 0, "fan_out": 1, "state": "calm",
+            },
+        })
+        root_id = ep["root_function_id"]
+        if root_id in visible_fns:
+            eid = f"{input_id}->{root_id}"
+            if eid not in added_edge_ids:
+                added_edge_ids.add(eid)
+                edges.append({"id": eid, "source": input_id, "target": root_id,
+                               "animated": True, "data": {"edge_type": "api"}})
+        ep_y += 150.0
 
-    for endpoint in endpoints:
-        call_tree = _build_call_tree(
-            endpoint_id=endpoint["id"],
-            root_function_id=endpoint["root_function_id"],
-            function_calls=function_calls,
-        )
-        positions: Dict[str, Dict[str, float]] = {}
-        _assign_tree_positions(
-            tree_node=call_tree,
-            depth=1,
-            start_x=start_x,
-            step_x=step_x,
-            row_gap_y=row_gap_y,
-            cursor_y=top_cursor_y,
-            positions=positions,
-        )
+    # Function nodes — all visible functions
+    for fid in visible_fns:
+        fn = functions[fid]
+        pos = fn_positions.get(fid, {"x": FN_X_START, "y": START_Y})
+        nodes.append({
+            "id": fid,
+            "type": "default",
+            "position": pos,
+            "data": {
+                "label": fn["name"],
+                "kind": "function",
+                "title": fn["name"],
+                "file": fn["file"],
+                "function_id": fn["id"],
+                "code": fn.get("code", ""),
+                "group": fn["group"],
+                "risk": fn["risk"],
+                "fan_in": fn["fan_in"],
+                "fan_out": fn["fan_out"],
+                "state": fn["state"],
+            },
+        })
 
-        root_node_id = call_tree["id"]
-        root_position = positions[root_node_id]
-        input_node_id = f'{endpoint["id"]}::input'
-        output_node_id = f'{endpoint["id"]}::output'
-
-        nodes.append(
-            {
-                "id": input_node_id,
-                "type": "input",
-                "position": {"x": start_x, "y": root_position["y"]},
-                "data": {
-                    "label": f'{endpoint["method"]} {endpoint["route_path"]}\nInput',
-                    "kind": "input",
-                    "title": f'{endpoint["method"]} {endpoint["route_path"]}',
-                    "file": endpoint["file"],
-                    "code": endpoint["code"] or "# Endpoint handler source not found.",
-                },
-                "style": {
-                    "background": "#1f2433",
-                    "color": "#f4f4f4",
-                    "border": "1px solid #0f62fe",
-                    "borderRadius": 10,
-                    "padding": 10,
-                    "width": 240,
-                },
-            }
-        )
-
-        def append_tree_nodes(tree_node: Dict[str, Any]) -> None:
-            function_id = tree_node["function_id"]
-            fn_meta = functions.get(function_id)
-            if not fn_meta:
-                return
-
-            fn_node_id = tree_node["id"]
-            node_position = positions[fn_node_id]
-
-            nodes.append(
-                {
-                    "id": fn_node_id,
-                    "type": "default",
-                    "position": {"x": node_position["x"], "y": node_position["y"]},
-                    "data": {
-                        "label": fn_meta["name"],
-                        "kind": "function",
-                        "title": fn_meta["name"],
-                        "file": fn_meta["file"],
-                        "function_id": fn_meta["id"],
-                        "code": fn_meta["code"] or "# Function source not found.",
-                    },
-                    "style": {
-                        "background": "#20202f",
-                        "color": "#f4f4f4",
-                        "border": "1px solid #39394c",
-                        "borderRadius": 10,
-                        "padding": 10,
-                        "width": 240,
-                    },
-                }
-            )
-
-            for child_node in tree_node["children"]:
-                child_id = child_node["id"]
-                edges.append(
-                    {
-                        "id": f"{fn_node_id}->{child_id}",
-                        "source": fn_node_id,
-                        "target": child_id,
-                        "animated": True,
-                        "style": {"stroke": "#0f62fe"},
-                    }
-                )
-                append_tree_nodes(child_node)
-
-        append_tree_nodes(call_tree)
-
-        edges.append(
-            {
-                "id": f"{input_node_id}->{root_node_id}",
-                "source": input_node_id,
-                "target": root_node_id,
-                "animated": True,
-                "style": {"stroke": "#0f62fe"},
-            }
-        )
-
-        max_depth = _tree_max_depth(call_tree)
-        output_x = start_x + (max_depth + 2) * step_x
-        output_y = root_position["y"]
-
-        nodes.append(
-            {
-                "id": output_node_id,
-                "type": "output",
-                "position": {"x": output_x, "y": output_y},
-                "data": {
-                    "label": "Output",
-                    "kind": "output",
-                    "title": "Output",
-                    "file": endpoint["file"],
-                    "code": "# Output node for response flow.",
-                },
-                "style": {
-                    "background": "#1f2433",
-                    "color": "#f4f4f4",
-                    "border": "1px solid #0f62fe",
-                    "borderRadius": 10,
-                    "padding": 10,
-                    "width": 220,
-                },
-            }
-        )
-
-        edges.append(
-            {
-                "id": f"{root_node_id}->{output_node_id}",
-                "source": root_node_id,
-                "target": output_node_id,
-                "animated": True,
-                "style": {"stroke": "#0f62fe"},
-            }
-        )
-
-        leaf_count = _tree_leaf_count(call_tree)
-        tree_visual_height = max(1, leaf_count - 1) * row_gap_y
-        top_cursor_y += tree_visual_height + endpoint_gap_y
+    # Call edges — function → called function
+    for fid in visible_fns:
+        for tid in function_calls.get(fid, []):
+            if tid not in visible_fns:
+                continue
+            eid = f"{fid}->{tid}"
+            if eid not in added_edge_ids:
+                added_edge_ids.add(eid)
+                edges.append({"id": eid, "source": fid, "target": tid,
+                               "animated": True, "data": {"edge_type": "call"}})
 
     return {
         "workspace_path": str(workspace_root),
-        "source_files": [_safe_relative(path, workspace_root) for path in source_files],
+        "source_files": [_safe_relative(p, workspace_root) for p in source_files],
         "nodes": nodes,
         "edges": edges,
     }
@@ -1290,6 +1407,154 @@ async def save_function_content(payload: FunctionSavePayload) -> Dict[str, Any]:
     return response
 
 
+@app.post("/api/function/delete")
+async def delete_function(payload: FunctionDeletePayload) -> Dict[str, Any]:
+    # Remove a function (and its leading decorators) from its source file.
+    global CURRENT_GRAPH_FILES
+
+    if not CURRENT_WORKSPACE_PATH:
+        raise HTTPException(status_code=400, detail="A workspace path must be connected first.")
+
+    workspace_root = Path(CURRENT_WORKSPACE_PATH).resolve()
+    relative_file, function_name = _parse_function_id(payload.function_id)
+    target = _resolve_requested_file(relative_file, workspace_root, must_exist=True)
+
+    try:
+        source = target.read_text(encoding="utf-8")
+    except OSError as error:
+        raise HTTPException(status_code=500, detail=f"Failed to read file: {error}") from error
+
+    # Find function range — AST first (it knows decorators), fallback to text.
+    start_index: Optional[int] = None
+    end_index: Optional[int] = None
+
+    try:
+        tree = ast.parse(source, filename=str(target))
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == function_name:
+                # Include decorators that precede the def
+                deco_start = min(
+                    [getattr(d, "lineno", node.lineno) for d in node.decorator_list] or [node.lineno]
+                )
+                start_index = max(deco_start - 1, 0)
+                end_index = max(getattr(node, "end_lineno", start_index + 1), start_index + 1)
+                break
+    except SyntaxError:
+        pass
+
+    if start_index is None or end_index is None:
+        text_range = _locate_function_range_by_text(source, function_name)
+        if text_range is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Function '{function_name}' was not found in {relative_file}.",
+            )
+        start_index, end_index = text_range
+
+    original_lines = source.splitlines(keepends=True)
+    # Also swallow one trailing blank line if present (keeps the file tidy)
+    drop_end = end_index
+    if drop_end < len(original_lines) and original_lines[drop_end].strip() == "":
+        drop_end += 1
+
+    updated_source = "".join([*original_lines[:start_index], *original_lines[drop_end:]])
+
+    try:
+        target.write_text(updated_source, encoding="utf-8")
+    except OSError as error:
+        raise HTTPException(status_code=500, detail=f"Failed to write file: {error}") from error
+
+    files_for_validation = _current_graph_files_for_validation(workspace_root)
+    if target.resolve() not in {p.resolve() for p in files_for_validation}:
+        files_for_validation.append(target.resolve())
+    syntax_errors = _collect_syntax_errors(files_for_validation, workspace_root)
+
+    response: Dict[str, Any] = {
+        "status": "deleted",
+        "function_id": payload.function_id,
+        "relative_path": _safe_relative(target, workspace_root),
+        "has_syntax_errors": bool(syntax_errors),
+        "syntax_errors": syntax_errors,
+    }
+    if not syntax_errors:
+        try:
+            graph_payload = _build_workspace_graph(
+                workspace_path=CURRENT_WORKSPACE_PATH,
+                main_file_path=CURRENT_MAIN_FILE_PATH or None,
+            )
+            CURRENT_GRAPH_FILES = graph_payload.get("source_files", [])
+            response["graph"] = graph_payload
+        except HTTPException as error:
+            response["graph_error"] = error.detail
+    return response
+
+
+_ROUTER_SCAFFOLD = '''from fastapi import APIRouter
+
+router = APIRouter({init_args})
+
+{tag_comment}# Define your routes below. Example:
+#
+# @router.get("/")
+# def list_items():
+#     return {{"items": []}}
+'''
+
+
+@app.post("/api/router/create")
+async def create_router_file(payload: RouterCreatePayload) -> Dict[str, Any]:
+    # Scaffold a new FastAPI APIRouter file inside the connected workspace.
+    global CURRENT_GRAPH_FILES
+
+    if not CURRENT_WORKSPACE_PATH:
+        raise HTTPException(status_code=400, detail="A workspace path must be connected first.")
+
+    workspace_root = Path(CURRENT_WORKSPACE_PATH).resolve()
+    relative = (payload.relative_path or "").strip().lstrip("/\\")
+    if not relative:
+        raise HTTPException(status_code=400, detail="relative_path is required.")
+    if not relative.endswith(".py"):
+        relative += ".py"
+
+    target = (workspace_root / relative).resolve()
+    if not target.is_relative_to(workspace_root):
+        raise HTTPException(status_code=400, detail="Path must stay inside the workspace.")
+    if target.exists():
+        raise HTTPException(status_code=409, detail=f"File already exists: {relative}")
+
+    init_parts: List[str] = []
+    if payload.prefix:
+        init_parts.append(f'prefix="{payload.prefix}"')
+    if payload.tag:
+        init_parts.append(f'tags=["{payload.tag}"]')
+    init_args = ", ".join(init_parts)
+    tag_comment = f"# Router scaffold: {payload.router_name}\n" if payload.router_name else ""
+
+    contents = _ROUTER_SCAFFOLD.format(init_args=init_args, tag_comment=tag_comment)
+
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(contents, encoding="utf-8")
+    except OSError as error:
+        raise HTTPException(status_code=500, detail=f"Failed to write file: {error}") from error
+
+    response: Dict[str, Any] = {
+        "status": "created",
+        "relative_path": _safe_relative(target, workspace_root),
+        "absolute_path": str(target),
+    }
+    try:
+        graph_payload = _build_workspace_graph(
+            workspace_path=CURRENT_WORKSPACE_PATH,
+            main_file_path=CURRENT_MAIN_FILE_PATH or None,
+        )
+        CURRENT_GRAPH_FILES = graph_payload.get("source_files", [])
+        response["graph"] = graph_payload
+    except HTTPException as error:
+        response["graph_error"] = error.detail
+    return response
+
+
 @app.post("/api/endpoint")
 async def create_endpoint(payload: EndpointPayload) -> Dict[str, Any]:
     if not CURRENT_WORKSPACE_PATH:
@@ -1391,4 +1656,11 @@ async def create_endpoint(payload: EndpointPayload) -> Dict[str, Any]:
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=5000, reload=False)
+    # Host and port are env-driven so the same entry point works locally and
+    # on any PaaS (Railway, Render, Fly, ...). Railway injects PORT; local
+    # dev keeps the historical 5000 default.
+    host = os.getenv("HOST", "127.0.0.1")
+    port = int(os.getenv("PORT", "5000"))
+    uvicorn.run(app, host=host, port=port, reload=False)
+
+# Made with Bob

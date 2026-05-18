@@ -92,10 +92,7 @@ export default function LeftPanel({
             </div>
             <div>
               <div className="gradient-text" style={{ fontSize: 15, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.1 }}>
-                IBM Bob
-              </div>
-              <div style={{ fontSize: 9.5, color: 'var(--text-muted)', letterSpacing: '0.07em', textTransform: 'uppercase', marginTop: 1 }}>
-                API Architect
+                Bobcat
               </div>
             </div>
           </div>
@@ -331,7 +328,7 @@ export default function LeftPanel({
   );
 }
 
-/* ── Section divider ── */
+// ── Section divider ──
 function Section({ label, children, accent }) {
   return (
     <div style={{
@@ -353,7 +350,7 @@ function Section({ label, children, accent }) {
   );
 }
 
-/* ── Small inline button ── */
+// ── Small inline button ──
 function SmallBtn({ children, onClick, color, disabled, flex }) {
   return (
     <button
@@ -381,7 +378,7 @@ function SmallBtn({ children, onClick, color, disabled, flex }) {
   );
 }
 
-/* ── AI feature button ── */
+// ── AI feature button ──
 function AIBtn({ children, onClick, color, disabled, note }) {
   return (
     <button

@@ -74,11 +74,8 @@ export default function TopBar({
                 margin: 0,
               }}
             >
-              IBM Bob API Architect
+              Bobcat
             </h1>
-            <p style={{ fontSize: 9.5, color: 'var(--text-muted)', margin: 0, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-              Canvas Bridge
-            </p>
           </div>
         </div>
 

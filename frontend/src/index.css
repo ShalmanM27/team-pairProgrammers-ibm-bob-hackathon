@@ -7,7 +7,7 @@
    ================================================================ */
 
 :root {
-  /* Dark theme — deep midnight violet, not black */
+  /* Dark theme: deep midnight violet, not black */
   --bg-base:     #07061C;
   --bg-surface:  #0C0B26;
   --bg-card:     #11102E;
@@ -86,56 +86,66 @@
 }
 
 [data-theme="light"] {
-  /* Premium warm-cool layered, NOT plain white */
-  --bg-base:     #EEEDF8;
-  --bg-surface:  #F5F4FE;
-  --bg-card:     #FDFCFF;
-  --bg-elevated: #E8E7F5;
-  --bg-input:    #FAFAFF;
+  /* Warm cream palette.
+     The page is paper, not glass. A warm cream base lets brand accents
+     (cyan, indigo, purple) pop instead of fighting a cool lavender wash.
+     All five surface tints stack with clear hierarchy:
+     base < surface < input < card (the brightest layer). */
+  --bg-base:     #F1EADA;
+  --bg-surface:  #F8F2E2;
+  --bg-card:     #FFFBEF;
+  --bg-elevated: #E7DEC8;
+  --bg-input:    #FFFCF3;
 
-  --bg-glass:        rgba(245, 244, 254, 0.86);
-  --bg-glass-strong: rgba(253, 252, 255, 0.97);
-  --bg-glass-panel:  rgba(238, 237, 248, 0.92);
+  --bg-glass:        rgba(248, 242, 226, 0.86);
+  --bg-glass-strong: rgba(255, 251, 239, 0.97);
+  --bg-glass-panel:  rgba(241, 234, 218, 0.92);
 
-  --text-primary:   #12101E;
-  --text-secondary: #4A4566;
-  --text-muted:     #9693B0;
-  --text-inverse:   #FDFCFF;
+  /* Text: deep navy on cream, strong contrast across all three weights. */
+  --text-primary:   #131722;
+  --text-secondary: #44495A;
+  --text-muted:     #837E70;
+  --text-inverse:   #FFFBEF;
 
-  --accent-blue:        #2563EB;
-  --accent-blue-hover:  #1D4ED8;
-  --accent-blue-soft:   rgba(37, 99, 235, 0.1);
-  --accent-indigo:      #4F46E5;
-  --accent-indigo-soft: rgba(79, 70, 229, 0.1);
-  --accent-purple:      #7C3AED;
-  --accent-purple-soft: rgba(124, 58, 237, 0.1);
-  --accent-cyan:        #0891B2;
-  --accent-cyan-soft:   rgba(8, 145, 178, 0.1);
-  --accent-green:       #059669;
-  --accent-green-soft:  rgba(5, 150, 105, 0.1);
-  --accent-amber:       #D97706;
-  --accent-amber-soft:  rgba(217, 119, 6, 0.1);
-  --accent-red:         #DC2626;
-  --accent-red-soft:    rgba(220, 38, 38, 0.1);
+  /* Brand accents tuned for cream backgrounds.
+     Dark hex picks keep buttons and links legible against the warm base.
+     Soft variants bumped to ~0.13 alpha so chip tints actually show. */
+  --accent-blue:        #1E54CC;
+  --accent-blue-hover:  #1845AB;
+  --accent-blue-soft:   rgba(30, 84, 204, 0.13);
+  --accent-indigo:      #4338CA;
+  --accent-indigo-soft: rgba(67, 56, 202, 0.13);
+  --accent-purple:      #6D28D9;
+  --accent-purple-soft: rgba(109, 40, 217, 0.13);
+  --accent-cyan:        #0E7490;
+  --accent-cyan-soft:   rgba(14, 116, 144, 0.13);
+  --accent-green:       #047857;
+  --accent-green-soft:  rgba(4, 120, 87, 0.13);
+  --accent-amber:       #B45309;
+  --accent-amber-soft:  rgba(180, 83, 9, 0.13);
+  --accent-red:         #B91C1C;
+  --accent-red-soft:    rgba(185, 28, 28, 0.13);
 
-  --border-subtle:  rgba(74, 69, 102, 0.08);
-  --border-default: rgba(74, 69, 102, 0.14);
-  --border-strong:  rgba(74, 69, 102, 0.22);
-  --border-accent:  rgba(37, 99, 235, 0.3);
+  /* Borders: warm slate, visible enough to read structure. */
+  --border-subtle:  rgba(74, 60, 30, 0.10);
+  --border-default: rgba(74, 60, 30, 0.18);
+  --border-strong:  rgba(74, 60, 30, 0.30);
+  --border-accent:  rgba(30, 84, 204, 0.40);
 
-  --shadow-xs: 0 1px 3px rgba(74,69,102,0.1);
-  --shadow-sm: 0 2px 8px rgba(74,69,102,0.12);
-  --shadow-md: 0 4px 16px rgba(74,69,102,0.12);
-  --shadow-lg: 0 8px 32px rgba(74,69,102,0.14);
-  --shadow-xl: 0 24px 64px rgba(74,69,102,0.18);
-  --shadow-float: 0 8px 40px rgba(74,69,102,0.16), 0 0 0 1px rgba(74,69,102,0.08);
-  --shadow-glow-blue: 0 0 20px rgba(37,99,235,0.12), 0 0 40px rgba(37,99,235,0.05);
+  /* Shadows: warm cast (matches the cream base). */
+  --shadow-xs: 0 1px 3px rgba(74, 60, 30, 0.12);
+  --shadow-sm: 0 2px 8px rgba(74, 60, 30, 0.14);
+  --shadow-md: 0 4px 16px rgba(74, 60, 30, 0.16);
+  --shadow-lg: 0 8px 32px rgba(74, 60, 30, 0.18);
+  --shadow-xl: 0 24px 64px rgba(74, 60, 30, 0.22);
+  --shadow-float: 0 8px 40px rgba(74, 60, 30, 0.20), 0 0 0 1px rgba(74, 60, 30, 0.10) inset;
+  --shadow-glow-blue: 0 0 20px rgba(30, 84, 204, 0.18), 0 0 40px rgba(30, 84, 204, 0.08);
 
-  --grad-blue-indigo:   linear-gradient(135deg, #2563EB 0%, #4F46E5 100%);
-  --grad-blue-purple:   linear-gradient(135deg, #2563EB 0%, #7C3AED 100%);
-  --grad-indigo-purple: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
-  --grad-blue-cyan:     linear-gradient(135deg, #2563EB 0%, #0891B2 100%);
-  --grad-header:        linear-gradient(90deg, #2563EB, #4F46E5, #7C3AED, #0891B2, #2563EB);
+  --grad-blue-indigo:   linear-gradient(135deg, #1E54CC 0%, #4338CA 100%);
+  --grad-blue-purple:   linear-gradient(135deg, #1E54CC 0%, #6D28D9 100%);
+  --grad-indigo-purple: linear-gradient(135deg, #4338CA 0%, #6D28D9 100%);
+  --grad-blue-cyan:     linear-gradient(135deg, #1E54CC 0%, #0E7490 100%);
+  --grad-header:        linear-gradient(90deg, #1E54CC, #4338CA, #6D28D9, #0E7490, #1E54CC);
   --gradient-blue-indigo: var(--grad-blue-indigo);
   --gradient-header:      var(--grad-header);
 }
@@ -163,6 +173,9 @@
 @keyframes orbFloat2     { 0%,100% { transform: translate(0,0) scale(1) } 33% { transform: translate(-25px,15px) scale(0.96) } 66% { transform: translate(20px,-30px) scale(1.04) } }
 @keyframes borderGlow    { 0%,100% { opacity:0.5 } 50% { opacity:1 } }
 @keyframes particleDrift { 0% { transform: translateY(0) translateX(0); opacity:0.3 } 100% { transform: translateY(-80px) translateX(20px); opacity:0 } }
+@keyframes flowDashFast  { to { stroke-dashoffset: -21; } }
+@keyframes flowDashMid   { to { stroke-dashoffset: -17; } }
+@keyframes flowDashSlow  { to { stroke-dashoffset: -17; } }
 
 /* ================================================================
    RESET & ROOT
@@ -268,7 +281,7 @@ body {
 }
 
 /* ================================================================
-   REACT FLOW OVERRIDES — CRITICAL: No transforms on hover/select
+   REACT FLOW OVERRIDES: CRITICAL: No transforms on hover/select
    that would cause node position instability.
    Only shadow and border changes are safe.
    ================================================================ */
@@ -279,9 +292,9 @@ body {
 .react-flow__pane          { cursor: grab !important; }
 .react-flow__pane.dragging { cursor: grabbing !important; }
 
-/* Node — NO transform, NO animation on hover/select */
+/* Node: NO transform, NO animation on hover/select */
 .react-flow__node {
-  /* No transition on transform — prevents layout shifts */
+  /* No transition on transform: prevents layout shifts */
   will-change: box-shadow, border-color;
 }
 .react-flow__node:hover {
@@ -290,10 +303,10 @@ body {
 }
 .react-flow__node.selected {
   z-index: 20 !important;
-  /* NO animation: nodePop — causes layout shifts */
+  /* NO animation: nodePop: causes layout shifts */
 }
 
-/* Connected-node glitter glow — color-cycling box-shadow animation */
+/* Connected-node glitter glow: color-cycling box-shadow animation */
 .node-connected-glow {
   animation: connectedGlitter 2.4s ease-in-out infinite;
 }
@@ -368,10 +381,12 @@ body {
   fill: rgba(7, 7, 9, 0.65) !important;
 }
 [data-theme="light"] .react-flow__minimap-mask {
-  fill: rgba(238, 237, 248, 0.65) !important;
+  /* Cream-tinted mask so the minimap viewport reads as "you are here"
+     against the warm canvas, not as a lavender notch. */
+  fill: rgba(241, 234, 218, 0.78) !important;
 }
 
-/* Built-in controls (hidden — we use our own) */
+/* Built-in controls (hidden: we use our own) */
 .react-flow__controls { display: none !important; }
 
 /* Selection */
@@ -392,6 +407,25 @@ pre, code, .mono {
   font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
   font-size: 12.5px;
   line-height: 1.7;
+}
+
+/* .code-block: the wrapper used by AIChatbot and AIGenerateEndpoint to render
+   model output. Forces an explicit dark editor background + light foreground
+   so the code is readable in BOTH light cream and dark midnight themes - no
+   more invisible text from inherited cream-on-cream. */
+.code-block {
+  background: #0E1116;
+  color: #E6E9F0;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+}
+.code-block pre,
+.code-block code {
+  background: transparent;
+  color: inherit;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
 }
 
 /* ================================================================
@@ -418,7 +452,7 @@ pre, code, .mono {
   pointer-events: none;
 }
 
-/* Dark mode canvas — vivid midnight nebula */
+/* Dark mode canvas: vivid midnight nebula */
 [data-theme="dark"] .canvas-workspace,
 .canvas-workspace {
   background:
@@ -430,15 +464,17 @@ pre, code, .mono {
     #06051A;
 }
 
-/* Light mode canvas — same vivid color zones as dark, over a light lavender base */
+/* Light mode canvas: vivid color zones tinted down to sit on warm cream.
+   Lower alpha + warmer fall-off so the orbs glow rather than dominate, and
+   the cream base shows between them rather than going pale-pink. */
 [data-theme="light"] .canvas-workspace {
   background:
-    radial-gradient(ellipse 80% 60% at 10% 15%,  rgba(79,142,247,0.42)  0%, transparent 55%),
-    radial-gradient(ellipse 70% 55% at 90% 82%,  rgba(176,110,247,0.38) 0%, transparent 55%),
-    radial-gradient(ellipse 55% 45% at 55% 48%,  rgba(46,216,240,0.20)  0%, transparent 58%),
-    radial-gradient(ellipse 45% 40% at 8%  75%,  rgba(26,224,160,0.22)  0%, transparent 55%),
-    radial-gradient(ellipse 40% 35% at 78% 12%,  rgba(124,127,245,0.28) 0%, transparent 55%),
-    #ECEAFB;
+    radial-gradient(ellipse 80% 60% at 10% 15%,  rgba(30,84,204,0.18)   0%, transparent 55%),
+    radial-gradient(ellipse 70% 55% at 90% 82%,  rgba(109,40,217,0.18)  0%, transparent 55%),
+    radial-gradient(ellipse 55% 45% at 55% 48%,  rgba(14,116,144,0.12)  0%, transparent 58%),
+    radial-gradient(ellipse 45% 40% at 8%  75%,  rgba(4,120,87,0.14)    0%, transparent 55%),
+    radial-gradient(ellipse 40% 35% at 78% 12%,  rgba(67,56,202,0.14)   0%, transparent 55%),
+    #F1EADA;
 }
 
 /* Gradient border utility (inner glow) */
@@ -483,7 +519,7 @@ pre, code, .mono {
 [data-tooltip]:hover::after { opacity: 1; }
 
 /* ================================================================
-   HERO — DOT GRID
+   HERO: DOT GRID
    ================================================================ */
 
 .hero-dot-grid {
@@ -491,7 +527,9 @@ pre, code, .mono {
   background-size: 28px 28px;
 }
 [data-theme="light"] .hero-dot-grid {
-  background-image: radial-gradient(rgba(79,142,247,0.22) 1px, transparent 1px);
+  /* Warm-slate dots so the grid reads on cream without the blue tint
+     fighting the brand accents floating above. */
+  background-image: radial-gradient(rgba(74,60,30,0.18) 1px, transparent 1px);
 }
 
 /* ================================================================
@@ -554,11 +592,169 @@ pre, code, .mono {
   to { stroke-dashoffset: -20; }
 }
 
+/* Node focus burst rings: two ripples radiate outward on selection */
+@keyframes focusBurst {
+  0%   { transform: scale(1);    opacity: 1; }
+  100% { transform: scale(1.55); opacity: 0; }
+}
+@keyframes focusBurst2 {
+  0%   { transform: scale(1);    opacity: 0.55; }
+  100% { transform: scale(1.9);  opacity: 0; }
+}
+
+/* Scan-line sweep down the code panel when it opens */
+@keyframes panelScan {
+  0%   { transform: translateY(0);     opacity: 0.85; }
+  80%  {                               opacity: 0.5;  }
+  100% { transform: translateY(100vh); opacity: 0;    }
+}
+
+/* Subtle left-edge glow pulse on the active code panel */
+@keyframes edgeGlow {
+  0%,100% { opacity: 0.5; }
+  50%      { opacity: 1;   }
+}
+
 @keyframes connectedGlitter {
   0%, 100% { box-shadow: 0 0 0 1.5px rgba(79,142,247,0.60),  0 0 18px 3px rgba(79,142,247,0.30),  0 0 40px 10px rgba(79,142,247,0.10),  inset 0 1px 0 rgba(255,255,255,0.07); }
   33%       { box-shadow: 0 0 0 1.5px rgba(124,127,245,0.65), 0 0 22px 4px rgba(124,127,245,0.32), 0 0 44px 12px rgba(124,127,245,0.12), inset 0 1px 0 rgba(255,255,255,0.07); }
   66%       { box-shadow: 0 0 0 1.5px rgba(176,110,247,0.60), 0 0 20px 3px rgba(176,110,247,0.28), 0 0 42px 10px rgba(176,110,247,0.10), inset 0 1px 0 rgba(255,255,255,0.07); }
 }
+
+/* Portal transition: used when opening/closing a module so the user sees
+   what is unfolding instead of an unexplained camera jolt. */
+@keyframes portalDim {
+  0%   { opacity: 0; }
+  20%  { opacity: 1; }
+  70%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes portalRing {
+  0%   { opacity: 0; transform: scale(0.35); }
+  20%  { opacity: 1; }
+  100% { opacity: 0; transform: scale(6); }
+}
+
+@keyframes portalLabel {
+  0%   { opacity: 0; transform: translate(-50%, -30%) scale(0.85); filter: blur(4px); }
+  18%  { opacity: 1; transform: translate(-50%, -50%) scale(1);    filter: blur(0); }
+  72%  { opacity: 1; transform: translate(-50%, -55%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -70%) scale(0.96); }
+}
+
+/* Staggered fade-in for newly-revealed nodes after a module opens.
+   Applied via React Flow node className; uses translate-Y so nodes
+   feel like they're rising into place rather than blinking on. */
+@keyframes nodeAppear {
+  from { opacity: 0; transform: translateY(8px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0)   scale(1);    }
+}
+
+/* The Chat-with-Bob hero CTA breathes a soft halo so a glancing judge can't
+   miss it. Pulses the box-shadow only; the button itself stays still. */
+@keyframes chatBobPulse {
+  0%, 100% { box-shadow: 0 4px 18px rgba(124,127,245,0.45), 0 0 0 1px rgba(255,255,255,0.10) inset; }
+  50%      { box-shadow: 0 4px 22px rgba(124,127,245,0.70), 0 0 0 3px rgba(124,127,245,0.15), 0 0 0 1px rgba(255,255,255,0.12) inset; }
+}
+
+/* ── Bob-mode hover glow (MIRE-style) ──
+   When the user hovers any node while Bob mode is active, that node and its
+   1-hop neighbours get this calm, breathing blue glow. Modelled directly on
+   MIRE's STATE_GLOW.active (#4a6fa5 / rgba(74,111,165,...)) so the look
+   matches what IBM_BOB ships. No color cycling, no flicker - just a quiet
+   "this is the live circuit" pulse. */
+@keyframes mireActiveGlow {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1.5px rgba(74, 111, 165, 0.70),
+      0 0 18px 2px rgba(74, 111, 165, 0.55),
+      0 0 36px 6px rgba(74, 111, 165, 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1.5px rgba(74, 111, 165, 0.95),
+      0 0 26px 4px rgba(74, 111, 165, 0.80),
+      0 0 48px 10px rgba(74, 111, 165, 0.28),
+      inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  }
+}
+
+/* Slightly stronger variant for the actually-hovered node (the focal point)
+   versus its connected neighbours - same color family, brighter centre. */
+@keyframes mireFocusGlow {
+  0%, 100% {
+    box-shadow:
+      0 0 0 2px rgba(74, 111, 165, 0.95),
+      0 0 24px 4px rgba(74, 111, 165, 0.70),
+      0 0 52px 12px rgba(74, 111, 165, 0.25),
+      inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px rgba(124, 156, 210, 1),
+      0 0 34px 6px rgba(74, 111, 165, 0.95),
+      0 0 64px 16px rgba(74, 111, 165, 0.35),
+      inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  }
+}
+
+.mire-active-glow { animation: mireActiveGlow 2s ease-in-out infinite; }
+.mire-focus-glow  { animation: mireFocusGlow  2s ease-in-out infinite; }
+
+/* ── Simulate Change: wave-propagation state animations ──
+   Three temporary states the graph nodes pass through while Bob is showing
+   the blast radius of a planned change. Each state has a different rhythm
+   so a viewer can read "this is the impact area" at a glance. */
+
+/* The clicked function — the epicenter. Strong, slow, pulsing red. */
+@keyframes simEpicenter {
+  0%, 100% {
+    box-shadow:
+      0 0 0 2px rgba(245,101,101,0.85),
+      0 0 26px 6px rgba(245,101,101,0.55),
+      0 0 60px 18px rgba(245,101,101,0.20),
+      inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px rgba(245,101,101,1),
+      0 0 38px 10px rgba(245,101,101,0.85),
+      0 0 80px 24px rgba(245,101,101,0.30),
+      inset 0 1px 0 rgba(255,255,255,0.08);
+  }
+}
+
+/* Affected but stable — calm purple wave passing through. */
+@keyframes simSimulated {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1.5px rgba(176,110,247,0.55),
+      0 0 18px 4px rgba(176,110,247,0.30),
+      inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1.5px rgba(176,110,247,0.85),
+      0 0 28px 8px rgba(176,110,247,0.55),
+      inset 0 1px 0 rgba(255,255,255,0.07);
+  }
+}
+
+/* High-impact: the change destabilises this function. Sharp red flicker. */
+@keyframes simUnstable {
+  0%   { box-shadow: 0 0 0 2px rgba(245,101,101,0.9), 0 0 22px 5px rgba(245,101,101,0.55); }
+  18%  { box-shadow: 0 0 0 1px rgba(245,101,101,0.3), 0 0 8px  2px rgba(245,101,101,0.18); }
+  36%  { box-shadow: 0 0 0 2px rgba(245,101,101,0.95),0 0 30px 8px rgba(245,101,101,0.75); }
+  54%  { box-shadow: 0 0 0 1px rgba(245,101,101,0.4), 0 0 10px 3px rgba(245,101,101,0.25); }
+  72%  { box-shadow: 0 0 0 2px rgba(245,101,101,0.95),0 0 28px 7px rgba(245,101,101,0.65); }
+  100% { box-shadow: 0 0 0 2px rgba(245,101,101,0.9), 0 0 22px 5px rgba(245,101,101,0.55); }
+}
+
+.sim-epicenter { animation: simEpicenter 1.4s ease-in-out infinite; }
+.sim-simulated { animation: simSimulated 2.0s ease-in-out infinite; }
+.sim-unstable  { animation: simUnstable  0.7s ease-in-out infinite; }
 
 /* ================================================================
    FEATURE CARD GLOW (for homepage feature grid)

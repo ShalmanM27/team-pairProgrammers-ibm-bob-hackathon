@@ -1,0 +1,44 @@
+# Netlify deployment config for the Bobcat frontend.
+#
+# When the Netlify site is created, point "Base directory" to `frontend` and
+# Netlify will pick up this file automatically. No CLI commands needed; a
+# `git push` to your connected branch triggers a build.
+
+[build]
+  # Build runs from this directory (relative to the repo root); the resulting
+  # bundle is in `dist/`.
+  base    = "frontend"
+  publish = "dist"
+  command = "npm run build"
+
+[build.environment]
+  # Pin Node to a version that matches Vite 5's tested range.
+  # Bump if you upgrade Vite. NPM_FLAGS keeps installs deterministic.
+  NODE_VERSION = "20"
+  NPM_FLAGS    = "--no-audit --no-fund"
+
+# Single-page-app fallback. The Bobcat UI is one React app on `/`, but any
+# unknown sub-path (e.g. a user typing /graph/123) must still serve the
+# index.html so the React state machine can pick up the route client-side.
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200
+
+# Security headers. Conservative defaults that don't break the app.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options        = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy        = "strict-origin-when-cross-origin"
+    # Allow the Railway backend and the watsonx CDN to load.
+    # If you tighten this further, also add your Railway domain explicitly.
+    Permissions-Policy     = "camera=(), microphone=(), geolocation=()"
+
+# Long-cache the hashed JS/CSS Vite emits (filenames change on every build,
+# so it's safe to cache forever).
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

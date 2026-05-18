@@ -1,0 +1,37 @@
+# Keep the Docker build context small. Anything matched here is NEVER copied
+# into the image, which means smaller layers, faster builds, and no secrets
+# ending up in the published image.
+
+# Python bytecode + caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual envs
+venv/
+.venv/
+env/
+
+# Local secrets - .env MUST never enter the image, watsonx creds live in
+# Railway's Variables tab instead.
+.env
+.env.*
+!.env.example
+
+# Editor / IDE
+.idea/
+.vscode/
+.DS_Store
+
+# Build artefacts that don't belong in a backend container
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Docs / scratch files
+*.md
+!README.md

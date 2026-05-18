@@ -1,7 +1,5 @@
-"""
-IBM watsonx.ai Integration Module
-Provides LLM capabilities using IBM Granite models and watsonx Orchestrate workflows.
-"""
+# IBM watsonx.ai Integration Module
+# Provides LLM capabilities using IBM Granite models and watsonx Orchestrate workflows.
 
 import os
 import json
@@ -22,10 +20,10 @@ logger = logging.getLogger(__name__)
 
 
 class WatsonxConfig:
-    """Configuration for IBM watsonx.ai services."""
+    # Configuration for IBM watsonx.ai services.
     
     def __init__(self):
-        """Initialize watsonx configuration from environment variables."""
+        # Initialize watsonx configuration from environment variables.
         self.api_key = os.environ.get("WATSONX_API_KEY")
         self.project_id = os.environ.get("WATSONX_PROJECT_ID")
         self.url = os.environ.get("WATSONX_URL", "https://us-south.ml.cloud.ibm.com")
@@ -38,7 +36,7 @@ class WatsonxConfig:
             raise ValueError("WATSONX_PROJECT_ID environment variable is required")
     
     def get_credentials(self) -> Dict[str, str]:
-        """Get IBM Cloud credentials in SDK-compatible dictionary format."""
+        # Get IBM Cloud credentials in SDK-compatible dictionary format.
         return {
             "url": self.url,
             "apikey": self.api_key,
@@ -46,23 +44,19 @@ class WatsonxConfig:
 
 
 class WatsonxLLMClient:
-    """
-    Client for IBM watsonx.ai Foundation Models.
-    
-    Uses IBM Granite 4.1 models for code generation, refactoring, and analysis.
-    """
+    # Client for IBM watsonx.ai Foundation Models.
+    #
+    # Uses IBM Granite 4.1 models for code generation, refactoring, and analysis.
     
     # Default model IDs selected from currently supported watsonx catalog.
     GRANITE_CODE_MODEL = "ibm/granite-8b-code-instruct"
     GRANITE_INSTRUCT_MODEL = "ibm/granite-3-8b-instruct"
     
     def __init__(self, config: WatsonxConfig):
-        """
-        Initialize watsonx LLM client.
-        
-        Args:
-            config: watsonx configuration
-        """
+        # Initialize watsonx LLM client.
+        #
+        # Args:
+        #     config: watsonx configuration
         self.config = config
         self.client = APIClient(config.get_credentials())
         self.client.set.default_project(config.project_id)
@@ -70,16 +64,14 @@ class WatsonxLLMClient:
         logger.info(f"Initialized watsonx client for project: {config.project_id}")
     
     def _get_model_inference(self, model_id: str, parameters: Dict[str, Any]) -> ModelInference:
-        """
-        Create a model inference instance.
-        
-        Args:
-            model_id: IBM Granite model identifier
-            parameters: Generation parameters
-        
-        Returns:
-            ModelInference instance
-        """
+        # Create a model inference instance.
+        #
+        # Args:
+        #     model_id: IBM Granite model identifier
+        #     parameters: Generation parameters
+        #
+        # Returns:
+        #     ModelInference instance
         return ModelInference(
             model_id=model_id,
             params=parameters,
@@ -96,20 +88,18 @@ class WatsonxLLMClient:
         top_p: float = 0.95,
         top_k: int = 50
     ) -> str:
-        """
-        Generate code using IBM Granite models.
-        
-        Args:
-            prompt: Code generation prompt
-            model_id: Model to use (default: Granite Code model)
-            max_tokens: Maximum tokens to generate
-            temperature: Sampling temperature (0.0-1.0)
-            top_p: Nucleus sampling parameter
-            top_k: Top-k sampling parameter
-        
-        Returns:
-            Generated code as string
-        """
+        # Generate code using IBM Granite models.
+        #
+        # Args:
+        #     prompt: Code generation prompt
+        #     model_id: Model to use (default: Granite Code model)
+        #     max_tokens: Maximum tokens to generate
+        #     temperature: Sampling temperature (0.0-1.0)
+        #     top_p: Nucleus sampling parameter
+        #     top_k: Top-k sampling parameter
+        #
+        # Returns:
+        #     Generated code as string
         model_id = model_id or self.GRANITE_CODE_MODEL
         
         parameters = {
@@ -138,16 +128,14 @@ class WatsonxLLMClient:
         code: str,
         analysis_type: str = "quality"
     ) -> Dict[str, Any]:
-        """
-        Analyze code using IBM Granite models.
-        
-        Args:
-            code: Code to analyze
-            analysis_type: Type of analysis (quality, security, performance)
-        
-        Returns:
-            Analysis results
-        """
+        # Analyze code using IBM Granite models.
+        #
+        # Args:
+        #     code: Code to analyze
+        #     analysis_type: Type of analysis (quality, security, performance)
+        #
+        # Returns:
+        #     Analysis results
         prompt = f"""Analyze the following Python code for {analysis_type}:
 
 ```python
@@ -191,17 +179,15 @@ Analysis:"""
         context: Optional[Dict[str, Any]] = None,
         model_id: Optional[str] = None,
     ) -> str:
-        """
-        Generate chat completion using IBM Granite models.
-        
-        Args:
-            messages: Conversation history
-            context: Additional context
-            model_id: Optional model identifier override
-        
-        Returns:
-            Assistant response
-        """
+        # Generate chat completion using IBM Granite models.
+        #
+        # Args:
+        #     messages: Conversation history
+        #     context: Additional context
+        #     model_id: Optional model identifier override
+        #
+        # Returns:
+        #     Assistant response
         # Build conversation prompt
         prompt_parts = ["You are an expert backend API architect assistant.\n"]
         
@@ -239,19 +225,15 @@ Analysis:"""
 
 
 class CheckpointManager:
-    """
-    Manages code modification checkpoints for recovery.
-    
-    Creates automatic backups before any code modification to enable rollback.
-    """
+    # Manages code modification checkpoints for recovery.
+    #
+    # Creates automatic backups before any code modification to enable rollback.
     
     def __init__(self, checkpoint_dir: str = ".bob/checkpoints"):
-        """
-        Initialize checkpoint manager.
-        
-        Args:
-            checkpoint_dir: Directory to store checkpoints
-        """
+        # Initialize checkpoint manager.
+        #
+        # Args:
+        #     checkpoint_dir: Directory to store checkpoints
         self.checkpoint_dir = Path(checkpoint_dir)
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"Checkpoint manager initialized: {self.checkpoint_dir}")
@@ -263,18 +245,16 @@ class CheckpointManager:
         operation: str,
         metadata: Optional[Dict[str, Any]] = None
     ) -> str:
-        """
-        Create a recovery checkpoint before modifying code.
-        
-        Args:
-            file_path: Path to file being modified
-            content: Current file content before modification
-            operation: Description of operation
-            metadata: Additional metadata
-        
-        Returns:
-            Checkpoint ID for recovery reference
-        """
+        # Create a recovery checkpoint before modifying code.
+        #
+        # Args:
+        #     file_path: Path to file being modified
+        #     content: Current file content before modification
+        #     operation: Description of operation
+        #     metadata: Additional metadata
+        #
+        # Returns:
+        #     Checkpoint ID for recovery reference
         import hashlib
         
         # Generate checkpoint ID
@@ -302,15 +282,13 @@ class CheckpointManager:
         return checkpoint_id
     
     def restore_checkpoint(self, checkpoint_id: str) -> Dict[str, Any]:
-        """
-        Restore a file from a checkpoint.
-        
-        Args:
-            checkpoint_id: Checkpoint identifier
-        
-        Returns:
-            Checkpoint data including file content
-        """
+        # Restore a file from a checkpoint.
+        #
+        # Args:
+        #     checkpoint_id: Checkpoint identifier
+        #
+        # Returns:
+        #     Checkpoint data including file content
         checkpoint_file = self.checkpoint_dir / f"{checkpoint_id}.json"
         
         if not checkpoint_file.exists():
@@ -323,15 +301,13 @@ class CheckpointManager:
         return checkpoint_data
     
     def list_checkpoints(self, file_path: Optional[str] = None) -> List[Dict[str, Any]]:
-        """
-        List available checkpoints.
-        
-        Args:
-            file_path: Filter by file path (optional)
-        
-        Returns:
-            List of checkpoint metadata
-        """
+        # List available checkpoints.
+        #
+        # Args:
+        #     file_path: Filter by file path (optional)
+        #
+        # Returns:
+        #     List of checkpoint metadata
         checkpoints = []
         
         for checkpoint_file in self.checkpoint_dir.glob("*.json"):
@@ -361,19 +337,15 @@ class CheckpointManager:
 
 
 class WatsonxOrchestrate:
-    """
-    watsonx Orchestrate workflow manager for human-in-the-loop approvals.
-    
-    Handles automated approval workflows before code modifications.
-    """
+    # watsonx Orchestrate workflow manager for human-in-the-loop approvals.
+    #
+    # Handles automated approval workflows before code modifications.
     
     def __init__(self, webhook_url: Optional[str] = None):
-        """
-        Initialize watsonx Orchestrate integration.
-        
-        Args:
-            webhook_url: Webhook URL for notifications (Slack, Teams, etc.)
-        """
+        # Initialize watsonx Orchestrate integration.
+        #
+        # Args:
+        #     webhook_url: Webhook URL for notifications (Slack, Teams, etc.)
         self.webhook_url = webhook_url or os.environ.get("ORCHESTRATE_WEBHOOK_URL")
         self.approval_required = os.environ.get("ORCHESTRATE_APPROVAL_REQUIRED", "false").lower() == "true"
         
@@ -386,18 +358,16 @@ class WatsonxOrchestrate:
         changes_summary: str,
         metadata: Optional[Dict[str, Any]] = None
     ) -> bool:
-        """
-        Request human approval for code modification.
-        
-        Args:
-            operation: Operation type (generate_endpoint, refactor_function, etc.)
-            file_path: File to be modified
-            changes_summary: Summary of changes
-            metadata: Additional metadata
-        
-        Returns:
-            True if approved, False if rejected
-        """
+        # Request human approval for code modification.
+        #
+        # Args:
+        #     operation: Operation type (generate_endpoint, refactor_function, etc.)
+        #     file_path: File to be modified
+        #     changes_summary: Summary of changes
+        #     metadata: Additional metadata
+        #
+        # Returns:
+        #     True if approved, False if rejected
         if not self.approval_required:
             logger.info("Auto-approval enabled, skipping human review")
             return True
@@ -423,7 +393,7 @@ class WatsonxOrchestrate:
         return True
     
     async def _send_webhook_notification(self, approval_request: Dict[str, Any]):
-        """Send webhook notification for approval request."""
+        # Send webhook notification for approval request.
         import aiohttp
         
         try:
@@ -459,7 +429,7 @@ _orchestrate: Optional[WatsonxOrchestrate] = None
 
 
 def get_watsonx_client() -> WatsonxLLMClient:
-    """Get or create watsonx LLM client instance."""
+    # Get or create watsonx LLM client instance.
     global _watsonx_client
     if _watsonx_client is None:
         config = WatsonxConfig()
@@ -468,7 +438,7 @@ def get_watsonx_client() -> WatsonxLLMClient:
 
 
 def get_checkpoint_manager() -> CheckpointManager:
-    """Get or create checkpoint manager instance."""
+    # Get or create checkpoint manager instance.
     global _checkpoint_manager
     if _checkpoint_manager is None:
         _checkpoint_manager = CheckpointManager()
@@ -476,7 +446,7 @@ def get_checkpoint_manager() -> CheckpointManager:
 
 
 def get_orchestrate() -> WatsonxOrchestrate:
-    """Get or create watsonx Orchestrate instance."""
+    # Get or create watsonx Orchestrate instance.
     global _orchestrate
     if _orchestrate is None:
         _orchestrate = WatsonxOrchestrate()

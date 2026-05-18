@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
-/**
- * Custom hook for WebSocket connection with automatic reconnection
- * 
- * @param {string} url - WebSocket URL
- * @param {function} onMessage - Callback for received messages
- * @param {object} options - Configuration options
- * @returns {object} WebSocket state and methods
- */
+//
+// Custom hook for WebSocket connection with automatic reconnection
+//
+// @param {string} url - WebSocket URL
+// @param {function} onMessage - Callback for received messages
+// @param {object} options - Configuration options
+// @returns {object} WebSocket state and methods
 export function useWebSocket(url, onMessage, options = {}) {
   const {
     reconnectInterval = 3000,

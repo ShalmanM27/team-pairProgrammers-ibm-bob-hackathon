@@ -1,0 +1,199 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <!--
+    Bobcat hackathon submission cover. 1200x630 (standard social/cover proportion).
+    Pure SVG so it scales cleanly for any size the submission form accepts.
+    To export as PNG: open the file in a browser, screenshot, or run
+    `rsvg-convert cover.svg -o cover.png` (or use the Chrome devtools
+    "Capture node screenshot" on the <svg> element).
+  -->
+  <defs>
+    <!-- Background gradient: midnight violet to deep slate, same family
+         as the in-app atmospheric canvas. -->
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0"   stop-color="#0A0A1A"/>
+      <stop offset="0.5" stop-color="#0E0E26"/>
+      <stop offset="1"   stop-color="#07061C"/>
+    </linearGradient>
+
+    <!-- Coloured nebula orbs - blurred radial gradients sprinkled in the corners -->
+    <radialGradient id="orb-blue" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0"   stop-color="#4F8EF7" stop-opacity="0.55"/>
+      <stop offset="0.6" stop-color="#4F8EF7" stop-opacity="0.10"/>
+      <stop offset="1"   stop-color="#4F8EF7" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="orb-purple" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0"   stop-color="#B06EF7" stop-opacity="0.45"/>
+      <stop offset="1"   stop-color="#B06EF7" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="orb-cyan" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0"   stop-color="#2ED8F0" stop-opacity="0.35"/>
+      <stop offset="1"   stop-color="#2ED8F0" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Wordmark gradient (Bobcat) -->
+    <linearGradient id="wordmark" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0"   stop-color="#FFFFFF"/>
+      <stop offset="0.55" stop-color="#E2E8F8"/>
+      <stop offset="1"   stop-color="#7C7FF5"/>
+    </linearGradient>
+
+    <!-- Mecha Bobcat gradients (eyes stay bright all the way to the edge,
+         so they never fade out at thumbnail size) -->
+    <radialGradient id="cat-visor" cx="0.4" cy="0.4" r="0.6">
+      <stop offset="0"   stop-color="#E8FBFF"/>
+      <stop offset="0.4" stop-color="#5EF0FF"/>
+      <stop offset="1"   stop-color="#2ED8F0"/>
+    </radialGradient>
+    <radialGradient id="cat-visor-halo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0"   stop-color="#2ED8F0" stop-opacity="0.60"/>
+      <stop offset="0.7" stop-color="#2ED8F0" stop-opacity="0.12"/>
+      <stop offset="1"   stop-color="#2ED8F0" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Dot-grid pattern (subtle tech-canvas background, low opacity) -->
+    <pattern id="dot-grid" x="0" y="0" width="32" height="32" patternUnits="userSpaceOnUse">
+      <circle cx="1.2" cy="1.2" r="1.2" fill="#4F8EF7" fill-opacity="0.16"/>
+    </pattern>
+  </defs>
+
+  <!-- Background layers -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="630" fill="url(#dot-grid)"/>
+
+  <!-- Nebula orbs in the four corners + centre -->
+  <circle cx="120"  cy="120" r="320" fill="url(#orb-blue)"/>
+  <circle cx="1080" cy="510" r="320" fill="url(#orb-purple)"/>
+  <circle cx="900"  cy="120" r="240" fill="url(#orb-cyan)"/>
+
+  <!-- Animated edges: faint dashed bezier curves to suggest the graph aesthetic -->
+  <g stroke="#7C7FF5" stroke-opacity="0.18" fill="none" stroke-width="1.4" stroke-dasharray="5 11">
+    <path d="M 60 540 C 280 460, 420 580, 640 460"/>
+    <path d="M 80 470 C 280 410, 460 510, 720 380"/>
+    <path d="M 50 600 C 280 520, 500 600, 800 500"/>
+  </g>
+  <g stroke="#2ED8F0" stroke-opacity="0.20" fill="none" stroke-width="1.4" stroke-dasharray="4 10">
+    <path d="M 700 80  C 880 170, 980 80, 1140 200"/>
+    <path d="M 800 60  C 920 140, 1040 100, 1160 240"/>
+  </g>
+
+  <!-- ─────── Mecha Bobcat (left half) ─────── -->
+  <!-- 64-unit design scaled 6.4x → 410 wide. Centred in the left half. -->
+  <g transform="translate(78 58) scale(6.4)">
+    <!-- Ground glow under the cat -->
+    <ellipse cx="32" cy="64" rx="30" ry="3" fill="#2ED8F0" fill-opacity="0.18"/>
+
+    <!-- Pear-shaped silhouette with tufted ears -->
+    <path d="M 6 32
+             L 14 4 L 17 1 L 19 5
+             L 24 26
+             C 27 28, 37 28, 40 26
+             L 45 5 L 47 1 L 50 4
+             L 58 32
+             C 60 50, 50 60, 32 60
+             C 14 60, 4 50, 6 32 Z"
+          fill="#10131F"
+          stroke="#3D6FC4"
+          stroke-width="1.4"
+          stroke-linejoin="round"/>
+
+    <!-- Forehead status pip -->
+    <circle cx="32" cy="14" r="1.7" fill="#2ED8F0"/>
+    <circle cx="32" cy="14" r="3.6" fill="#2ED8F0" fill-opacity="0.30"/>
+
+    <!-- Eye halos -->
+    <circle cx="23" cy="36" r="11" fill="url(#cat-visor-halo)"/>
+    <circle cx="41" cy="36" r="11" fill="url(#cat-visor-halo)"/>
+
+    <!-- The eyes: big round cyan LED. Solid radial gradient that stays
+         bright all the way to the edge so they never wash out. -->
+    <circle cx="23" cy="36" r="6.2" fill="url(#cat-visor)"/>
+    <circle cx="41" cy="36" r="6.2" fill="url(#cat-visor)"/>
+
+    <!-- Eye specular highlights -->
+    <circle cx="21" cy="34" r="1.6" fill="#FFFFFF" fill-opacity="0.90"/>
+    <circle cx="39" cy="34" r="1.6" fill="#FFFFFF" fill-opacity="0.90"/>
+    <circle cx="25" cy="38" r="0.7" fill="#FFFFFF" fill-opacity="0.65"/>
+    <circle cx="43" cy="38" r="0.7" fill="#FFFFFF" fill-opacity="0.65"/>
+
+    <!-- Subtle nose triangle -->
+    <path d="M 30 49 L 32 51.5 L 34 49 Z"
+          fill="#3D6FC4" fill-opacity="0.55"/>
+  </g>
+
+  <!-- ─────── Wordmark + tagline (right half) ─────── -->
+  <g transform="translate(640 230)">
+    <!-- BOBCAT wordmark, big -->
+    <text x="0" y="0"
+          font-family="Inter, ui-sans-serif, system-ui, -apple-system, sans-serif"
+          font-size="120"
+          font-weight="800"
+          letter-spacing="-5"
+          fill="url(#wordmark)">
+      Bobcat
+    </text>
+
+    <!-- Underline accent -->
+    <rect x="0" y="20" width="76" height="6" rx="3" fill="#2ED8F0"/>
+
+    <!-- Tagline -->
+    <text x="0" y="80"
+          font-family="Inter, ui-sans-serif, system-ui, sans-serif"
+          font-size="28"
+          font-weight="500"
+          fill="#C0C4D8"
+          letter-spacing="-0.4">
+      Your codebase, made visible.
+    </text>
+
+    <!-- Description sub-line -->
+    <text x="0" y="130"
+          font-family="Inter, ui-sans-serif, system-ui, sans-serif"
+          font-size="17"
+          font-weight="400"
+          fill="#8C90A8"
+          letter-spacing="0.1">
+      <tspan x="0" dy="0">An interactive architecture canvas for backends.</tspan>
+      <tspan x="0" dy="24">Chat, refactor and simulate, all powered by IBM Bob.</tspan>
+    </text>
+
+    <!-- Feature pills row -->
+    <g transform="translate(0 200)" font-family="'JetBrains Mono', monospace" font-size="13" font-weight="600">
+      <g transform="translate(0 0)">
+        <rect x="0" y="0" width="100" height="28" rx="14" fill="rgba(79,142,247,0.12)" stroke="#4F8EF7" stroke-opacity="0.45"/>
+        <text x="50" y="19" text-anchor="middle" fill="#4F8EF7">CHAT</text>
+      </g>
+      <g transform="translate(110 0)">
+        <rect x="0" y="0" width="100" height="28" rx="14" fill="rgba(124,127,245,0.12)" stroke="#7C7FF5" stroke-opacity="0.45"/>
+        <text x="50" y="19" text-anchor="middle" fill="#7C7FF5">RISK</text>
+      </g>
+      <g transform="translate(220 0)">
+        <rect x="0" y="0" width="120" height="28" rx="14" fill="rgba(176,110,247,0.12)" stroke="#B06EF7" stroke-opacity="0.45"/>
+        <text x="60" y="19" text-anchor="middle" fill="#B06EF7">REFACTOR</text>
+      </g>
+      <g transform="translate(350 0)">
+        <rect x="0" y="0" width="120" height="28" rx="14" fill="rgba(46,216,240,0.12)" stroke="#2ED8F0" stroke-opacity="0.45"/>
+        <text x="60" y="19" text-anchor="middle" fill="#2ED8F0">SIMULATE</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Footer credit -->
+  <g transform="translate(60 580)" font-family="'JetBrains Mono', monospace">
+    <text font-size="13" font-weight="600" fill="#4F8EF7" letter-spacing="2">
+      BUILT WITH IBM BOB
+    </text>
+    <text x="0" y="18" font-size="11" fill="#5C5F75" letter-spacing="1">
+      IBM Bob Hackathon 2026 - Team Winnovators
+    </text>
+  </g>
+
+  <!-- Small URL hint, right footer -->
+  <text x="1140" y="592"
+        text-anchor="end"
+        font-family="'JetBrains Mono', monospace"
+        font-size="11"
+        fill="#5C5F75"
+        letter-spacing="1">
+    bobcat.dev
+  </text>
+</svg>

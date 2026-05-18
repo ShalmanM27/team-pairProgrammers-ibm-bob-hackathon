@@ -55,7 +55,7 @@ export default function NodeChat({ node, selectedModelId, onClose }) {
   const prompts = KIND_PROMPTS[kind] || KIND_PROMPTS.default;
   const title  = node?.data?.title || node?.data?.label || 'Unnamed';
 
-  /* clear conversation when node changes */
+  // clear conversation when node changes
   useEffect(() => {
     if (node?.id !== prevNodeId.current) {
       prevNodeId.current = node?.id;
@@ -64,16 +64,16 @@ export default function NodeChat({ node, selectedModelId, onClose }) {
     }
   }, [node?.id]);
 
-  /* auto-scroll */
+  // auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const buildContext = useCallback(() => {
-    const parts = [`Node: ${title}`, `Kind: ${kind}`];
-    if (node?.data?.file) parts.push(`File: ${node.data.file}`);
-    if (node?.data?.code) parts.push(`Code:\n${node.data.code}`);
-    return parts.join('\n');
+    const ctx = { node: title, kind };
+    if (node?.data?.file) ctx.file = node.data.file;
+    if (node?.data?.code) ctx.code = node.data.code;
+    return ctx;
   }, [title, kind, node]);
 
   const sendMessage = useCallback(async (text) => {
@@ -85,12 +85,11 @@ export default function NodeChat({ node, selectedModelId, onClose }) {
     try {
       const history = messages.map((m) => ({ role: m.role, content: m.content }));
       const result  = await requestChatCompletion({
-        message: trimmed,
+        messages: [...history, { role: 'user', content: trimmed }],
         context: buildContext(),
-        conversation_history: history,
         model_id: selectedModelId,
       });
-      const reply = result.response || result.message || 'No response.';
+      const reply = result.content || result.response || result.message || 'No response.';
       setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
     } catch (err) {
       setMessages((prev) => [...prev, { role: 'assistant', content: `Error: ${err.message}` }]);
@@ -133,7 +132,7 @@ export default function NodeChat({ node, selectedModelId, onClose }) {
             {title}
           </div>
           <div style={{ fontSize: 9, color, textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 600, marginTop: 1 }}>
-            {kind} · IBM Bob AI
+            {kind}
           </div>
         </div>
         <button
@@ -152,7 +151,7 @@ export default function NodeChat({ node, selectedModelId, onClose }) {
           <div style={{ padding: '12px 0', textAlign: 'center' }}>
             <MessageSquare size={20} color={color} style={{ margin: '0 auto 7px', display: 'block', opacity: 0.6 }} />
             <div style={{ fontSize: 10.5, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-              Ask IBM Bob AI about this {kind} node
+              Ask Bob about this {kind} node
             </div>
           </div>
         ) : messages.map((msg, i) => (
@@ -186,7 +185,7 @@ export default function NodeChat({ node, selectedModelId, onClose }) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Quick prompts — only when empty */}
+      {/* Quick prompts: only when empty */}
       {empty && (
         <div style={{ padding: '0 10px 8px', display: 'flex', flexWrap: 'wrap', gap: 4, flexShrink: 0 }}>
           {prompts.map((p, i) => (
